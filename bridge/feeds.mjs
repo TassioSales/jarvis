@@ -289,6 +289,173 @@ export async function briefing() {
 }
 
 /**
+ * Articles with their text, from outlets whose feeds carry it.
+ *
+ * The top-stories feed is headlines only, which is enough to say that
+ * something happened and nothing more. These three publish a summary or the
+ * opening of the piece alongside the title, so he can say what the story is
+ * actually about without a web search — and so there is a second and third
+ * account to check a headline against.
+ *
+ * Only an excerpt is kept. It is there to brief from, not to republish; the
+ * article stays with its publisher, one link away.
+ */
+const ARTICLE_FEEDS =
+  LANGUAGE === 'pt'
+    ? [
+        { source: 'G1', url: 'https://g1.globo.com/rss/g1/' },
+        { source: 'Agência Brasil', url: 'https://agenciabrasil.ebc.com.br/rss/ultimasnoticias/feed.xml' },
+        { source: 'BBC News Brasil', url: 'https://feeds.bbci.co.uk/portuguese/rss.xml' },
+      ]
+    : [
+        { source: 'BBC News', url: 'https://feeds.bbci.co.uk/news/rss.xml' },
+        { source: 'The Guardian', url: 'https://www.theguardian.com/world/rss' },
+      ]
+
+const EXCERPT = 420
+
+/** Feed markup down to a sentence or two of plain text. */
+const plain = (html) =>
+  decode(html)
+    .replace(/<(script|style)[\s\S]*?<\/\1>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+
+function excerpt(text) {
+  if (text.length <= EXCERPT) return text
+  const cut = text.slice(0, EXCERPT)
+  // End on a sentence if there is one in reach, otherwise on a word.
+  const stop = Math.max(cut.lastIndexOf('. '), cut.lastIndexOf('? '), cut.lastIndexOf('! '))
+  return stop > EXCERPT * 0.5 ? cut.slice(0, stop + 1) : `${cut.slice(0, cut.lastIndexOf(' '))}…`
+}
+
+export const articles = cached(NEWS_TTL, async () => {
+  const batches = await Promise.all(
+    ARTICLE_FEEDS.map(async ({ source, url }) => {
+      try {
+        const res = await fetch(url, {
+          signal: AbortSignal.timeout(TIMEOUT),
+          headers: { 'user-agent': 'Mozilla/5.0 JARVIS' },
+        })
+        if (!res.ok) return []
+        return [...(await res.text()).matchAll(/<item>([\s\S]*?)<\/item>/g)].slice(0, 12).map(([, item]) => ({
+          title: tag(item, 'title'),
+          source,
+          summary: excerpt(plain(tag(item, 'description'))),
+          link: tag(item, 'link'),
+          at: new Date(tag(item, 'pubDate')).toISOString(),
+        }))
+      } catch {
+        return []
+      }
+    }),
+  )
+  return batches.flat().filter((a) => a.title)
+})
+
+/**
+ * Whether two headlines are the same story.
+ *
+ * Outlets word the same event differently, so this compares the words that
+ * carry the event — names, places, numbers — and ignores the grammar around
+ * them. Two headlines match when they share at least three such words and a
+ * fair proportion of all of them. Deliberately strict: calling two different
+ * stories one is the mistake that makes "confirmed by two outlets" a lie,
+ * while missing a match only makes him attribute a story he could have stated.
+ */
+const FILLER = new Set(
+  ('para como mais menos sobre apos após entre contra desde ainda pode podem deve devem ' +
+    'diz dizem afirma anuncia novo nova novos novas anos dias hoje ontem amanha amanhã ' +
+    'that this with from after over into says said will have been were their about').split(' '),
+)
+const keywords = (title) =>
+  new Set(
+    title
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[̀-ͯ]/g, '')
+      .split(/[^a-z0-9]+/)
+      .filter((w) => (w.length >= 4 || /^\d{2,}$/.test(w)) && !FILLER.has(w)),
+  )
+
+function sameStory(a, b) {
+  const ka = keywords(a)
+  const kb = keywords(b)
+  let shared = 0
+  for (const w of ka) if (kb.has(w)) shared++
+  return shared >= 3 && shared / Math.min(ka.size, kb.size) >= 0.5
+}
+
+/**
+ * The top stories, each with the outlets found carrying it.
+ *
+ * A story with one outlet behind it is that outlet's report; with two or more
+ * it is something that can be stated. The list of names is what lets him tell
+ * the two apart out loud.
+ */
+export const verified = cached(NEWS_TTL, async () => {
+  const [top, more] = await Promise.all([news(), articles().catch(() => [])])
+  const pool = [...top, ...more]
+  return top.map((story) => {
+    const outlets = new Set([story.source])
+    for (const other of pool) {
+      if (other.source !== story.source && sameStory(story.title, other.title)) outlets.add(other.source)
+    }
+    const text = more.find((a) => sameStory(story.title, a.title))
+    return { ...story, outlets: [...outlets], summary: text?.summary ?? '' }
+  })
+})
+
+/**
+ * The months ahead: how much rain to expect, and how sure that is.
+ *
+ * A forecast past two weeks is not "it will rain on the 14th" — nobody can
+ * know that. It is fifty-one runs of the same model started from slightly
+ * different conditions, and what can honestly be read off them is a total per
+ * month and how far the runs disagree. So each month is given as a middle
+ * value with a low and a high around it, and the spread is the forecast's own
+ * statement of its confidence.
+ */
+export const outlook = cached(6 * 60 * 60_000, async () => {
+  const at = await place()
+  const data = await getJson(
+    'https://seasonal-api.open-meteo.com/v1/seasonal?timezone=auto&forecast_days=183' +
+      `&latitude=${at.lat}&longitude=${at.lon}&daily=precipitation_sum`,
+  )
+  const members = Object.keys(data.daily).filter((k) => /^precipitation_sum_member\d+$/.test(k))
+  const months = new Map()
+  data.daily.time.forEach((day, i) => {
+    const key = day.slice(0, 7)
+    if (!months.has(key)) months.set(key, { days: 0, totals: members.map(() => 0) })
+    const month = months.get(key)
+    month.days++
+    members.forEach((m, j) => {
+      month.totals[j] += data.daily[m][i] ?? 0
+    })
+  })
+  const pick = (sorted, q) => sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))]
+  return {
+    city: at.city,
+    months: [...months.entries()]
+      .map(([month, { days, totals }]) => {
+        const sorted = [...totals].sort((a, b) => a - b)
+        const [y, m] = month.split('-').map(Number)
+        return {
+          month,
+          // A month the forecast only partly covers would read as a dry one.
+          whole: days >= new Date(y, m, 0).getDate(),
+          mm: Math.round(pick(sorted, 0.5)),
+          low: Math.round(pick(sorted, 0.2)),
+          high: Math.round(pick(sorted, 0.8)),
+        }
+      })
+      .filter((m) => m.whole)
+      .slice(0, 5),
+  }
+})
+
+/**
  * What is already known about the outside world, as a few lines of text for a
  * model's prompt — the forecast and the rates as last fetched.
  *
@@ -316,12 +483,28 @@ export function worldNote() {
         '.',
     )
   }
-  const n = news.peek()
+  const n = verified.peek() ?? news.peek()
   if (n?.length) {
     lines.push(
-      "Today's top headlines: " +
-        n.slice(0, 5).map((h) => `"${h.title}" (${h.source})`).join('; ') +
-        '. Enough to say what is in the news; anything beyond the headline itself needs looking up.',
+      "Today's top stories, with the outlets carrying each. One outlet: attribute it to that outlet. " +
+        'Two or more: it may be stated as established.\n' +
+        n
+          .slice(0, 5)
+          .map(
+            (h) =>
+              `  • "${h.title}" — ${(h.outlets ?? [h.source]).join(', ')}` +
+              (h.summary ? `. ${h.summary.slice(0, 240)}` : ''),
+          )
+          .join('\n'),
+    )
+  }
+  const o = outlook.peek()
+  if (o?.months?.length) {
+    lines.push(
+      `Rain outlook for ${o.city}, month by month, as a likely total in millimetres with the range the ` +
+        'forecast runs span (a wide range means low confidence; never give a day-by-day forecast from this): ' +
+        o.months.map((m) => `${m.month} about ${m.mm} mm (${m.low}–${m.high})`).join('; ') +
+        '.',
     )
   }
   if (!lines.length) return ''
@@ -331,4 +514,5 @@ export function worldNote() {
 // Fetched once at start so the first question about either finds them here.
 void weather().catch(() => {})
 void markets().catch(() => {})
-void news().catch(() => {})
+void verified().catch(() => {})
+void outlook().catch(() => {})

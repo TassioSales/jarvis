@@ -48,7 +48,12 @@ type Weather = {
 
 type Story = { topic: string; title: string; source: string; image: string | null; at: string }
 
-type Headline = { title: string; source: string; at: string }
+type Headline = { title: string; source: string; at: string; outlets?: string[]; summary?: string }
+
+type Outlook = {
+  city: string
+  months: { month: string; mm: number; low: number; high: number }[]
+}
 
 type Quote = {
   name: string
@@ -216,6 +221,7 @@ function Dashboard({ state }: { state: Snapshot }) {
   const time = useClock()
   const machine = usePoll<Telemetry>('/telemetry', 2000, true)
   const weather = usePoll<Weather>('/weather', 5 * 60_000, true)
+  const outlook = usePoll<Outlook>('/outlook', 30 * 60_000, true)
   const cpu = useCpuHistory(machine)
   const mem = machine ? (machine.memUsed / machine.memTotal) * 100 : 0
 
@@ -290,6 +296,23 @@ function Dashboard({ state }: { state: Snapshot }) {
       </Card>
 
       <Card
+        className="sat-chart-card sat-outlook"
+        title={t('RAIN · MONTHS AHEAD')}
+        aside={t('mm, likely total')}
+      >
+        <BarChart
+          points={(outlook?.months ?? []).map((m) => ({
+            label: new Date(`${m.month}-15T12:00`).toLocaleDateString(LANG, { month: 'short' }).replace('.', ''),
+            value: m.mm,
+            note: `${m.low}–${m.high} mm`,
+          }))}
+          unit=""
+          ceiling={Math.max(50, Math.ceil(Math.max(...(outlook?.months ?? []).map((m) => m.high), 0) / 50) * 50)}
+          empty={t('no rain expected')}
+        />
+      </Card>
+
+      <Card
         className="sat-chart-card sat-cpu"
         title={t('PROCESSOR · LAST 2 MIN')}
         aside={machine ? `${Math.round(machine.cpu)}%` : undefined}
@@ -357,6 +380,13 @@ function Headlines({ items, now, count }: { items: Headline[] | null; now: Date;
             <p>{item.title}</p>
             <span>
               {item.source} · {ago(item.at, now)}
+              {/* Said in words, not by colour: how many outlets carry it. */}
+              {(item.outlets?.length ?? 1) > 1 && (
+                <em title={item.outlets!.join(', ')}>
+                  {' '}
+                  · {item.outlets!.length} {t('outlets')}
+                </em>
+              )}
             </span>
           </div>
         </li>

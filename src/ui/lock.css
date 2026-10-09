@@ -364,10 +364,13 @@
   grid-column: span 4;
 }
 .sat-temp {
-  grid-column: span 7;
+  grid-column: span 5;
 }
 .sat-rain {
-  grid-column: span 5;
+  grid-column: span 3;
+}
+.sat-outlook {
+  grid-column: span 4;
 }
 .sat-cpu {
   grid-column: span 5;
@@ -983,6 +986,10 @@
   color: var(--ink);
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
+}
+.sat-headlines em {
+  font-style: normal;
+  color: var(--interface);
 }
 .sat-headlines span {
   font-family: 'JetBrains Mono', monospace;

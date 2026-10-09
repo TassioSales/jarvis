@@ -36,7 +36,7 @@ function niceRange(min: number, max: number, step: number): [number, number] {
   return hi === lo ? [lo, lo + step] : [lo, hi]
 }
 
-type Point = { label: string; value: number }
+type Point = { label: string; value: number; note?: string }
 
 const PAD = { top: 22, right: 16, bottom: 28, left: 50 }
 
@@ -281,8 +281,24 @@ export function BarChart({
           >
             {points[hover].label} · {Math.round(points[hover].value)}
             {unit}
+            {points[hover].note ? ` (${points[hover].note})` : ''}
           </text>
         )}
+        {/* With only a handful of bars there is room to say each value, and a
+            wall display has nobody to hover over it. */}
+        {points.length <= 8 &&
+          hover === null &&
+          points.map((p, i) => (
+            <text
+              key={`v${p.label}${i}`}
+              className="chart-value"
+              x={scaleX(i)}
+              y={scaleY(Math.min(ceiling, p.value)) - 7}
+              textAnchor="middle"
+            >
+              {Math.round(p.value)}
+            </text>
+          ))}
       </svg>
     </div>
   )
