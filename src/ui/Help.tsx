@@ -45,6 +45,9 @@ const PT: Group[] = [
     title: 'Agir',
     lines: [
       ['“Abra o …”', 'programas e sites, com confirmação'],
+      ['“Pausa” · “Próxima”', 'controla a música ou o vídeo'],
+      ['“Aumenta o volume”', 'também “abaixa” e “mudo”'],
+      ['“Crie a rotina … que abre …”', 'depois é só dizer o nome dela'],
       ['“Sim” · “Não”', 'responde quando ele pede confirmação'],
       ['“Bloquear” · “Sou eu”', 'trava e destrava pelo rosto'],
       ['“Cadastrar meu rosto”', 'ensina o seu rosto a ele'],
@@ -82,6 +85,7 @@ const EN: Group[] = [
     title: 'Acting',
     lines: [
       ['“Open …”', 'programs and sites, with confirmation'],
+      ['“Pause” · “Next”', 'controls what is playing'],
       ['“Yes” · “No”', 'answers when he asks to proceed'],
       ['“Lock” · “It is me”', 'locks and unlocks by face'],
     ],

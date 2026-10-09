@@ -12,7 +12,7 @@ const app = read('App.tsx')
 
 /** The source text of `const NAME = <expression>`, up to the next declaration. */
 function source(text, name) {
-  const m = new RegExp(`const ${name} =\\s*([\\s\\S]*?)\\n(?=/\\*\\*|const |export |\\n)`).exec(text)
+  const m = new RegExp(`const ${name}(?::[^=]+)? =\\s*([\\s\\S]*?)\\n(?=/\\*\\*|const |export |\\n)`).exec(text)
   if (!m) throw new Error(`could not find ${name}`)
   return m[1].trim()
 }
@@ -59,6 +59,32 @@ const cases = {
 
 let failures = 0
 let checks = 0
+
+// The media shortcuts: each phrase must reach the right key, and ordinary
+// sentences must reach none.
+const MEDIA_CMDS = eval(source(app, 'MEDIA_CMDS'))
+const mediaFor = (text) => MEDIA_CMDS.find(([re]) => re.test(text.trim()))?.[1] ?? null
+for (const [text, expected] of [
+  ['pausa', 'toggle'],
+  ['Pausa a música.', 'toggle'],
+  ['play', 'toggle'],
+  ['próxima', 'next'],
+  ['pula essa música', 'next'],
+  ['anterior', 'previous'],
+  ['aumenta o volume', 'volume_up'],
+  ['abaixa um pouco o som', 'volume_down'],
+  ['mudo', 'mute'],
+  ['qual é a próxima reunião?', null],
+  ['pausa para o café às três', null],
+  ['o volume de vendas aumentou?', null],
+  ['toca aí no assunto do contrato', null],
+]) {
+  checks++
+  if (mediaFor(text) !== expected) {
+    failures++
+    console.log(`media: ${JSON.stringify(text)} gave ${mediaFor(text)}, expected ${expected}`)
+  }
+}
 for (const [name, { yes, no }] of Object.entries(cases)) {
   const re = patterns[name]
   for (const text of yes) {

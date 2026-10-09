@@ -33,7 +33,7 @@ import {
   type Scene as BriefScene,
 } from './lib/briefing'
 import * as kokoro from './lib/kokoro'
-import { ORB, TTS_ENGINE } from './config'
+import { BRIDGE_HTTP_URL, ORB, TTS_ENGINE } from './config'
 import { forTool, attention } from './lib/fillers'
 import {
   ask,
@@ -133,6 +133,22 @@ const ENROL_CMD =
 const YES_CMD =
   /^(?:sim|pode|podes|confirmo|confirmado|confirmar?|prossiga|prosseguir|autorizo|autorizado|fa[cç]a|manda|vai|claro|isso|yes|yeah|go ahead|do it|proceed|confirm)\b/i
 const NO_CMD = /^(?:n[aã]o|nunca|cancela|cancelar|cancele|negativo|pare|para|deixa|esquece|no|nope|cancel|stop|don'?t)\b/i
+/**
+ * What is playing, controlled on the words.
+ *
+ * Asking the model to pause the music means the music keeps playing for the
+ * four seconds it takes to decide to. These are whole utterances and nothing
+ * longer, each mapped to a media key and a number of presses.
+ */
+const MEDIA_CMDS: [RegExp, string, number][] = [
+  [/^(?:pausa|pausar|pause|play|toca|tocar|continua a m[uú]sica|retoma(?:r)?(?: a m[uú]sica)?|(?:pausa|pausar|para|parar|toca|tocar) (?:a m[uú]sica|o v[ií]deo|o som))[\s.!]*$/i, 'toggle', 1],
+  [/^(?:pr[oó]xima(?: m[uú]sica| faixa)?|pula(?:r)?(?: (?:essa|esta|a) (?:m[uú]sica|faixa))?|next(?: (?:song|track))?)[\s.!]*$/i, 'next', 1],
+  [/^(?:(?:m[uú]sica |faixa )?anterior|volta(?:r)? (?:a|uma) (?:m[uú]sica|faixa)|previous(?: (?:song|track))?)[\s.!]*$/i, 'previous', 1],
+  [/^(?:aumenta(?:r)?|sobe|subir)(?: um pouco)?(?: o)? (?:volume|som)|^(?:mais alto|volume up)[\s.!]*$/i, 'volume_up', 5],
+  [/^(?:abaixa(?:r)?|baixa(?:r)?|diminui(?:r)?|reduz(?:ir)?)(?: um pouco)?(?: o)? (?:volume|som)|^(?:mais baixo|volume down)[\s.!]*$/i, 'volume_down', 5],
+  [/^(?:mudo|silenciar|muta(?:r)?|tira(?:r)? o som|mute)[\s.!]*$/i, 'mute', 1],
+]
+
 /** Asking what he can do, which is answered on screen rather than by the model. */
 const HELP_CMD =
   /^(?:ajuda|me ajuda|socorro|comandos|quais (?:s[aã]o )?os comandos|o que (?:voc[eê]|o senhor) (?:sabe|pode|consegue) fazer|help|commands|what can you do)[\s.?!]*$/i
@@ -553,6 +569,29 @@ export default function App() {
     listen(FOLLOW_UP_MS)
   }
 
+  /**
+   * Press a media key, and say nothing about it. Whoever asked for the music
+   * to pause wants quiet, not a butler confirming that it is now quiet.
+   */
+  const pressMedia = async (action: string, times: number) => {
+    ++turn.current
+    clearIdle()
+    let ok = false
+    try {
+      const res = await fetch(`${BRIDGE_HTTP_URL}/media`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action, times }),
+      })
+      ok = res.ok
+    } catch {
+      ok = false
+    }
+    sfx.play(ok ? 'done' : 'error')
+    // Open for a moment longer, so "mais um pouco" or "próxima" follows on.
+    listen(FOLLOW_UP_MS)
+  }
+
   /** Put the list of things to say on screen, and say that it is there. */
   const showHelp = async () => {
     const mine = ++turn.current
@@ -574,6 +613,8 @@ export default function App() {
     if (ENROL_CMD.test(said)) return void enrolFace()
     if (BRIEF_CMD.test(said)) return void brief(said)
     if (HELP_CMD.test(said)) return void showHelp()
+    const media = MEDIA_CMDS.find(([re]) => re.test(said.trim()))
+    if (media) return void pressMedia(media[1], media[2])
     if ((UNLOCK_CMD.test(said) || IDENTIFY_CMD.test(said)) && face.enrolled()) {
       return void (async () => {
         ++turn.current
