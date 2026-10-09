@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { addReminder, cancelReminders, listReminders } from './reminders.mjs'
 
 /**
  * What JARVIS knows about the person he works for, kept between sessions.
@@ -59,6 +60,35 @@ export function memoryNote() {
 
 const text = (s) => ({ content: [{ type: 'text', text: s }] })
 
+/**
+ * Notes are the other half of memory: not facts about the user, but things the
+ * user wants kept — a prompt, a list, an idea dictated across the room. One
+ * markdown file each, in a `notes` folder beside the memory, which is also a
+ * folder Obsidian can open as a vault.
+ *
+ * The same bargain as `remember`: it writes with writes off, and is allowed to
+ * because of how little it can reach — one folder, a name it cannot use to
+ * climb out of that folder, text only, a size cap.
+ */
+const NOTES = join(DIR, 'notes')
+
+/** A title as a file name: no path separators, no dots to climb with. */
+const slug = (title) =>
+  String(title)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9 _-]+/g, ' ')
+    .trim()
+    .replace(/\s+/g, '-')
+    .slice(0, 60)
+    .toLowerCase() || 'nota'
+
+const stamp = () => {
+  const d = new Date()
+  const p = (n) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
+}
+
 export function memoryServer() {
   return createSdkMcpServer({
     name: 'jarvis_memory',
@@ -89,6 +119,91 @@ export function memoryServer() {
           if (list.length) appendFileSync(FILE, `- ${clean}\n`)
           else save([clean])
           return text('Remembered.')
+        },
+      ),
+      tool(
+        'save_note',
+        'Write something down for them: a note, a prompt, a list, an idea they ' +
+          'dictated. Use it when they ask you to note, save, write down or keep ' +
+          'a text — as opposed to `remember`, which is for short facts about ' +
+          'them. Saved as a markdown file they can open in any editor. If a note ' +
+          'with the same title exists, the new text is added beneath the old.',
+        {
+          title: z.string().describe('A short title; it becomes the file name.'),
+          text: z.string().describe('The note itself, as markdown or plain text.'),
+        },
+        async ({ title, text: body }) => {
+          const content = String(body ?? '').trim().slice(0, 20_000)
+          if (!content) return text('Nothing to write down.')
+          mkdirSync(NOTES, { recursive: true })
+          const file = join(NOTES, `${slug(title)}.md`)
+          let existing = ''
+          try {
+            existing = readFileSync(file, 'utf8')
+          } catch {
+            // a new note
+          }
+          writeFileSync(
+            file,
+            existing
+              ? `${existing.trimEnd()}\n\n---\n*${stamp()}*\n\n${content}\n`
+              : `# ${String(title).trim()}\n\n*${stamp()}*\n\n${content}\n`,
+          )
+          return text(`Saved to ${file}.`)
+        },
+      ),
+      tool(
+        'remind',
+        'Arrange to say something later, or every day. Give `at` for a single ' +
+          'time, as a local date and time like 2026-10-09T18:00, or `daily` for ' +
+          'a time of day like 07:00 that repeats. Set `briefing` to true to run ' +
+          'the morning briefing at that time instead of saying a sentence. He ' +
+          'only speaks reminders while he is running; one that fell due while ' +
+          'he was off is said when he is next started.',
+        {
+          text: z.string().optional().describe('What to say when the time comes, as he would say it.'),
+          at: z.string().optional().describe('One time: local date and time, YYYY-MM-DDTHH:MM.'),
+          daily: z.string().optional().describe('Every day at this time: HH:MM, 24-hour.'),
+          briefing: z.boolean().optional().describe('Run the briefing instead of saying `text`.'),
+        },
+        async (args) => {
+          try {
+            const r = addReminder(args)
+            return text(
+              r.daily
+                ? `Set: every day at ${r.daily}${r.briefing ? ', the briefing' : ''}. id ${r.id}`
+                : `Set for ${new Date(r.at).toLocaleString()}. id ${r.id}`,
+            )
+          } catch (err) {
+            return text(`Not set: ${err.message}`)
+          }
+        },
+      ),
+      tool(
+        'list_reminders',
+        'What he has been asked to say later, with the id of each.',
+        {},
+        async () => {
+          const list = listReminders()
+          if (!list.length) return text('No reminders are set.')
+          return text(
+            list
+              .map(
+                (r) =>
+                  `${r.id}: ${r.daily ? `daily ${r.daily}` : new Date(r.at).toLocaleString()} — ` +
+                  (r.briefing ? 'the briefing' : r.text),
+              )
+              .join('\n'),
+          )
+        },
+      ),
+      tool(
+        'cancel_reminder',
+        'Cancel reminders: by id, or every one whose text contains the given words.',
+        { about: z.string().describe('An id, or words from the reminder.') },
+        async ({ about }) => {
+          const n = cancelReminders(about)
+          return text(n ? `Cancelled: ${n}.` : 'No such reminder.')
         },
       ),
       tool(

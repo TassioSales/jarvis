@@ -34,6 +34,8 @@ type Frame = {
   mode?: string
   seconds?: number
   when?: string
+  /** On a `reminder` frame: run the briefing instead of saying the text. */
+  briefing?: boolean
   /** On a `confirm` frame: what he wants to do, and to what. */
   tool?: string
   detail?: string
@@ -80,6 +82,14 @@ export type CaptureRequest = {
   when: 'now' | 'past'
 }
 export type CaptureResult = { data?: string; mimeType?: string; error?: string }
+
+/** A reminder that has fallen due. `briefing` means run the briefing rather
+ *  than say `text`. */
+export type Reminder = { text: string; briefing: boolean }
+let onReminder: ((r: Reminder) => void) | null = null
+export function watchReminders(fn: (r: Reminder) => void) {
+  onReminder = fn
+}
 
 /** The bridge asking whether an action may go ahead; see the consent gate in
  *  bridge/server.mjs. Answered with a plain yes or no. */
@@ -214,6 +224,8 @@ function dispatch(ws: WebSocket) {
           .then(reply)
           .catch((err) => reply({ error: String(err?.message ?? err) }))
       }
+    } else if (msg.type === 'reminder') {
+      onReminder?.({ text: String(msg.text ?? ''), briefing: msg.briefing === true })
     } else if (msg.type === 'confirm' && msg.id) {
       const id = msg.id
       const answer = (ok: boolean) => {

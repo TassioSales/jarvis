@@ -87,6 +87,8 @@ const PT: Record<string, string> = {
   LOG: 'REGISTRO',
   WORLD: 'MUNDO',
   OVERVIEW: 'PANORAMA',
+  'Sir, a reminder': 'Senhor, um lembrete',
+  'Good morning': 'Bom dia',
   'CONFIRMATION REQUIRED': 'CONFIRMAÇÃO NECESSÁRIA',
   'Shall I proceed, sir?': 'Devo prosseguir, senhor?',
   'say yes': 'diga sim',

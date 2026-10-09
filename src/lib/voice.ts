@@ -95,10 +95,18 @@ const WAKE_DEBOUNCE = 1500
  * one first. The handful that do not fit the shape are listed after it.
  */
 export const NAME_PATTERN =
-  "(?:d?j[aáeé]i?(?:r[vb][iíeay][szx]?s?|[vb][iíeay][szx]s?)|ch[aá]r[vb]is|travis|java's|jarv)"
+  "(?:d?j[aáeé]i?(?:r[vb][iíeay][szx]?s?|[vb][iíeay][szx]s?)|d[aá]r?v[eiy]s|ch[aá]r[vb]is|travis|java's|jarv)"
 export const HAIL_PATTERN = '(?:hey|hi|ok|okay|yo|ei|oi|olá|ola|ô|o)'
 
 const WAKE = new RegExp(`\\b${HAIL_PATTERN}?\\s*${NAME_PATTERN}\\b(?!'s)`, 'i')
+
+/**
+ * A greeting and nothing else. Short on purpose — the whole utterance has to
+ * be the greeting, so a television saying "boa noite" in the middle of a
+ * sentence does not wake him.
+ */
+const GREETING =
+  /^(?:muito\s+)?(?:bom dia|boa tarde|boa noite|good (?:morning|afternoon|evening))(?:[\s,]+(?:senhor|a todos|pessoal))?[\s.!]*$/i
 
 /** Everything after the wake phrase, which is usually the actual command. */
 function afterWake(text: string): string {
@@ -604,6 +612,14 @@ async function startElevenVoice(h: VoiceHandlers): Promise<Voice> {
           diag.dropped = ''
           diag.accepted++
           h.onWake(afterWake(said))
+        } else if (GREETING.test(said) && Date.now() - lastWake > WAKE_DEBOUNCE) {
+          // "Bom dia" to an empty room is addressed to him. The greeting is
+          // passed on as what was said, so it gets the briefing it asks for.
+          lastWake = Date.now()
+          diag.wakes++
+          diag.dropped = ''
+          diag.accepted++
+          h.onWake(said)
         } else {
           drop(`heard "${said.slice(-40)}" — not his name`)
         }
@@ -686,6 +702,13 @@ async function startElevenVoice(h: VoiceHandlers): Promise<Voice> {
         }
         h.onSpeechStart()
       }
+      // And while he is waiting for a request. The app is counting down to
+      // standing by again, and nothing told it that the request had begun —
+      // so a sentence started late in the window, or simply a long one, ran
+      // past the countdown. He stood down mid-sentence, the transcript arrived
+      // to find him asleep, and it was thrown away as "not his name". From the
+      // chair: you asked, and he ignored you.
+      if (mode === 'command') h.onSpeechStart()
     },
     onEnd: (blob, ms) => {
       const mode = h.mode()

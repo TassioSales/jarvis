@@ -84,6 +84,11 @@ export function watchCapture(
   if (usingBridge) bridge.watchCapture(fn)
 }
 
+/** Reminders falling due. Bridge-only: the bridge is what keeps the time. */
+export function watchReminders(fn: (r: bridge.Reminder) => void): void {
+  if (usingBridge) bridge.watchReminders(fn)
+}
+
 /** The bridge asking leave to act. Bridge-only: nothing else can act. */
 export function watchConfirm(fn: (req: bridge.ConfirmRequest) => Promise<boolean>): void {
   if (usingBridge) bridge.watchConfirm(fn)

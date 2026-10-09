@@ -43,6 +43,7 @@ import {
   watchBlades,
   watchCapture,
   watchConfirm,
+  watchReminders,
   watchUi,
   watchConnection,
   connectedLabels,
@@ -71,6 +72,12 @@ import { t as tr } from './lib/i18n'
  *  people say his name and *then* think about what they wanted. */
 const AWAIT_SPEECH_MS = 14000
 
+/** Once someone has started speaking, how long he will wait for the words.
+ *  Longer than the longest segment the detector records, plus the round trip
+ *  to transcribe it — this is a safety net for speech that never becomes a
+ *  transcript, not a limit on how long a sentence may be. */
+const SPEAKING_GRACE_MS = 28000
+
 /** After an answer, how long the mic stays open for a follow-up before he
  *  drops back to standby. Long enough that you don't have to say the name
  *  again to continue a thought. */
@@ -93,6 +100,9 @@ const UP_TO_NAME = new RegExp(`^.*?\\b${NAME}\\b[\\s,.:!?-]*`, 'i')
 /** "Jarvis, stop" — an order to be quiet, not a new question. */
 const STOP_CMD =
   /^(?:pare|para|parar|chega|cancela|cancelar|cancele|sil[eê]ncio|quieto|stop|cancel|quiet|enough)\b[\s\S]{0,24}$/i
+/** The whole of what was said is an order to be quiet. */
+const BARE_STOP =
+  /^(?:pare|parar|pode parar|chega|j[aá] chega|cancela|cancelar|sil[eê]ncio|quieto|stop|enough|quiet|shut up)[\s.!]*$/i
 /** A leading vocative on a real command: "Jarvis, what's the weather". */
 const LEADING_NAME = new RegExp(`^${HAIL}?\\s*${NAME}\\b[\\s,.:!?-]*`, 'i')
 
@@ -147,6 +157,8 @@ export default function App() {
   /** When the on-device detector last heard his name, so the transcript of
    *  that same breath can be told from a name said mid-conversation. */
   const nameAt = useRef(0)
+  /** Reminders that fell due while he was busy, said once he is free. */
+  const dueQueue = useRef<{ text: string; briefing: boolean }[]>([])
   /** Settles the open "shall I proceed" question, if there is one. */
   const consent = useRef<((ok: boolean) => void) | null>(null)
   const voicePoll = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -503,6 +515,38 @@ export default function App() {
     listen(FOLLOW_UP_MS)
   }
 
+  /**
+   * Deliver whatever reminders are waiting, if this is a moment he can speak.
+   * Locked, he holds them: a reminder is for one person, and the lock means he
+   * does not yet know that person is the one in the room.
+   */
+  const sayDue = async () => {
+    const s = store.getState()
+    if (!dueQueue.current.length || s.locked) return
+    if (s.phase !== 'dormant' && s.phase !== 'listening') return
+    const reminder = dueQueue.current.shift()!
+    if (reminder.briefing) return void brief(tr('Good morning'))
+
+    const mine = ++turn.current
+    clearIdle()
+    s.setPhase('speaking')
+    sfx.play('wake')
+    // He usually words a reminder as he would say it, vocative included; the
+    // lead-in is only for the ones that arrive as a bare note.
+    const line = /^(senhor|sir)/i.test(reminder.text)
+      ? reminder.text
+      : `${tr('Sir, a reminder')}: ${reminder.text}`
+    s.pushTurn({ id: newId(), role: 'jarvis', text: line })
+    const spk = createSpeaker()
+    speaker.current = spk
+    spk.say(line)
+    await spk.end()
+    if (mine !== turn.current) return
+    speaker.current = null
+    // Open afterwards, so "obrigado" or "adia dez minutos" needs no name.
+    listen(FOLLOW_UP_MS)
+  }
+
   /** Everything he hears goes through here: the lock first, then the model. */
   const handle = (said: string) => {
     if (store.getState().locked) return void unlock(said)
@@ -607,6 +651,10 @@ export default function App() {
 
     silence()
     store.getState().setPhase('listening')
+    // The request has begun, so the countdown to standing by starts again
+    // from here. Not simply cancelled: a cough is speech to the detector and
+    // never becomes a sentence, and he must still stand down after one.
+    idleTimer.current = setTimeout(goDormant, SPEAKING_GRACE_MS)
   }
 
   const isBusy = (phase: string) =>
@@ -641,6 +689,14 @@ export default function App() {
     // else heard meanwhile is dropped, not queued — an overheard remark that
     // surfaced as a question a minute later would be worse than a missed one.
     if (isBusy(phase)) {
+      // "Chega." needs no name. It is the one order that has to work when he
+      // is the one making the noise, and the whole utterance must be the order
+      // — "para" inside a sentence is a preposition, not a command.
+      if (phase === 'speaking' && BARE_STOP.test(text.trim())) {
+        cutOff()
+        listen(AWAIT_SPEECH_MS)
+        return
+      }
       if (store.getState().identity === 'scanning' || !UP_TO_NAME.test(text)) {
         voiceLog('ignored', { why: `busy (${phase}), not addressed by name`, text })
         return
@@ -787,6 +843,16 @@ export default function App() {
         if (held) camera.releaseCamera()
         store.getState().setLooking(null)
       }
+    })
+
+    /**
+     * A reminder falling due. Said at once if he is idle; held if he is in the
+     * middle of something, because talking over his own answer to deliver a
+     * reminder helps nobody. The queue is emptied by the timer below.
+     */
+    watchReminders((reminder) => {
+      dueQueue.current.push(reminder)
+      void sayDue()
     })
 
     /**
@@ -987,6 +1053,15 @@ export default function App() {
       if (allowed) void powerOn()
     }, 700)
     return () => clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // -- reminders ------------------------------------------------------------
+
+  // A reminder that arrived while he was busy waits here for a quiet moment.
+  useEffect(() => {
+    const timer = setInterval(() => void sayDue(), 4000)
+    return () => clearInterval(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
