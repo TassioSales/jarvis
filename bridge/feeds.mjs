@@ -32,7 +32,7 @@ function cached(ttl, load) {
   let value = null
   let at = 0
   let inFlight = null
-  return async () => {
+  const get = async () => {
     if (value && Date.now() - at < ttl) return value
     inFlight ??= load()
       .then((fresh) => {
@@ -50,6 +50,9 @@ function cached(ttl, load) {
       })
     return inFlight
   }
+  /** The last good answer without fetching, or null. Never waits. */
+  get.peek = () => value
+  return get
 }
 
 /**
@@ -274,3 +277,39 @@ export async function briefing() {
     stories: s.status === 'fulfilled' ? s.value : [],
   }
 }
+
+/**
+ * What is already known about the outside world, as a few lines of text for a
+ * model's prompt — the forecast and the rates as last fetched.
+ *
+ * This is what lets "how's the weather" be answered at once and by the small
+ * model, instead of costing an agent turn and a web search to rediscover a
+ * figure that is sitting in this process. Read from the cache only: it never
+ * makes a request, and says nothing about what has not been fetched yet.
+ */
+export function worldNote() {
+  const lines = []
+  const w = weather.peek()
+  if (w) {
+    lines.push(
+      `Weather in ${w.city} right now: ${Math.round(w.now.temp)}°C (feels ${Math.round(w.now.feels)}°C), ` +
+        `humidity ${Math.round(w.now.humidity)}%, wind ${Math.round(w.now.wind)} km/h. ` +
+        `Today ${Math.round(w.today.min)}–${Math.round(w.today.max)}°C, ${w.today.rain}% chance of rain. ` +
+        `Tomorrow ${Math.round(w.tomorrow.min)}–${Math.round(w.tomorrow.max)}°C, ${w.tomorrow.rain}% chance of rain.`,
+    )
+  }
+  const m = markets.peek()
+  if (m?.length) {
+    lines.push(
+      'Exchange rates in Brazilian reais: ' +
+        m.map((q) => `${q.name} ${q.last >= 1000 ? Math.round(q.last) : q.last.toFixed(2)} (${q.dayPct >= 0 ? '+' : ''}${q.dayPct.toFixed(2)}% today)`).join(', ') +
+        '.',
+    )
+  }
+  if (!lines.length) return ''
+  return '\n\nLive readings you may state as fact (fetched minutes ago, their own city):\n- ' + lines.join('\n- ')
+}
+
+// Fetched once at start so the first question about either finds them here.
+void weather().catch(() => {})
+void markets().catch(() => {})

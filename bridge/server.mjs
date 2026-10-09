@@ -15,6 +15,7 @@
  *   node bridge/server.mjs
  */
 
+import './env.mjs'
 import { WebSocketServer } from 'ws'
 import { query } from '@anthropic-ai/claude-agent-sdk'
 import { displayServer } from './panels.mjs'
@@ -22,29 +23,14 @@ import { uiServer } from './ui.mjs'
 import { chromeAvailable, chromeServer } from './chrome.mjs'
 import { visionServer } from './vision.mjs'
 import { memoryFacts, memoryNote, memoryServer } from './memory.mjs'
-import { briefing, markets, news, weather } from './feeds.mjs'
+import { briefing, markets, news, weather, worldNote } from './feeds.mjs'
+import { geminiModel, geminiReady, quick } from './gemini.mjs'
 import { cpus, freemem, homedir, hostname, tmpdir, totalmem, uptime } from 'node:os'
 import { appendFileSync, mkdirSync, readFileSync, realpathSync, statSync, renameSync } from 'node:fs'
 import { readFile, realpath, stat } from 'node:fs/promises'
 import { isAbsolute, join, relative, resolve as resolvePath } from 'node:path'
 import { openRemote, proxyError, vetTarget, PROXY_UA } from './net.mjs'
 import { probeUrl, renderPage } from './page.mjs'
-
-/**
- * Read `.env.local` here as well as in the launcher.
- *
- * `npm start` already loads it, but `npm run bridge` — the two-terminal recipe
- * in the README — starts this file directly, and then the face is configured
- * for one language and the brain for another. Variables already in the shell
- * still win, so running it twice is harmless.
- */
-if (typeof process.loadEnvFile === 'function') {
-  try {
-    process.loadEnvFile(new URL('../.env.local', import.meta.url))
-  } catch {
-    // No file, which is the default and perfectly fine.
-  }
-}
 
 const PORT = Number(process.env.JARVIS_BRIDGE_PORT ?? 8787)
 
@@ -138,6 +124,15 @@ const MODEL = process.env.JARVIS_MODEL ?? 'claude-opus-5'
  * dead air shows.
  */
 const EFFORT = process.env.JARVIS_EFFORT ?? 'high'
+
+/**
+ * MCP servers to leave out, by the name their tools carry — `claude_ai_Figma`
+ * for the tools called `mcp__claude_ai_Figma__*`. Comma separated.
+ */
+const DISABLED_SERVERS = (process.env.JARVIS_DISABLE_SERVERS ?? '')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean)
 
 /**
  * Both spellings of every renamed built-in are listed on purpose. The SDK
@@ -575,6 +570,23 @@ const NOT_LOGGED_IN =
 const LOGIN_LINE = /^pt/i.test(LANG)
   ? 'Receio que o Claude Code não esteja autenticado, senhor. Abra um terminal, execute claude e faça o login.'
   : "I'm afraid Claude Code is not signed in, sir. Open a terminal, run claude, and log in."
+
+/**
+ * Claude answering, but not with an answer: over its allowance, overloaded,
+ * out of credit. Like the signed-out case these arrive as an ordinary result,
+ * and only short ones are tested — a real answer that happens to mention a
+ * rate limit is not a failure.
+ */
+const LIMITED =
+  /limit (reached|exceeded)|hit your (usage )?limit|out of (extra )?usage|usage limit|rate.?limit|credit balance|overloaded|quota|try again later/i
+
+const claudeFailed = (msg) =>
+  msg.subtype !== 'success' ||
+  NOT_LOGGED_IN.test(msg.result ?? '') ||
+  ((msg.result ?? '').length < 300 && LIMITED.test(msg.result ?? ''))
+
+/** Requests that are data for the display, and so need Claude's tools. */
+const FOR_DISPLAY = /^(DADOS PARA O PAINEL|DATA FOR THE DISPLAY)/
 
 const LANGUAGE_NOTE =
   LANGUAGE_NOTES[LANG.split(/[-_]/)[0].toLowerCase()] ??
@@ -1250,6 +1262,12 @@ console.log(
 )
 console.log(`[jarvis] model ${MODEL} · effort ${EFFORT} · language ${LANG}`)
 console.log(
+  geminiReady()
+    ? `[jarvis] simple questions and outages go to ${geminiModel()}`
+    : '[jarvis] no GEMINI_API_KEY — every question goes to Claude',
+)
+if (DISABLED_SERVERS.length) console.log(`[jarvis] left out of the prompt: ${DISABLED_SERVERS.join(', ')}`)
+console.log(
   `[jarvis] writes ${ALLOW_WRITES ? 'ENABLED' : 'disabled'}` +
     (ALLOW_WRITES ? '' : ' — set JARVIS_ALLOW_WRITES=1 to permit shell/file/device actions'),
 )
@@ -1349,7 +1367,29 @@ wss.on('connection', (socket) => {
    * waits for it rather than racing it, exactly as it would behind an
    * interrupt. Set JARVIS_PRIME=0 to go back to a cold first turn.
    */
-  let priming = process.env.JARVIS_PRIME !== '0'
+  // Off by default once the small model is answering the simple questions:
+  // what reaches Claude then is work with tools in it, which is slow for its
+  // own reasons, and a warm-up on every page load is a turn spent on nothing.
+  let priming = (process.env.JARVIS_PRIME ?? (geminiReady() ? '0' : '1')) !== '0'
+
+  /**
+   * What the two brains need to know about each other.
+   *
+   * `recent` is the conversation as the small model sees it — both brains'
+   * turns, so it can follow a thread. `aside` is the opposite debt: exchanges
+   * the small model handled that Claude never saw, handed over the next time a
+   * question does go to Claude so that "and what about tomorrow" still has
+   * something to refer to.
+   */
+  const recent = []
+  let aside = []
+  let lastQuestion = ''
+  let lastForDisplay = false
+  let quickAbort = null
+  const note = (role, text) => {
+    recent.push({ role, text: String(text).slice(0, 600) })
+    if (recent.length > 12) recent.shift()
+  }
   const PRIME_TEXT = 'Systems check before the user arrives. Reply with the single word: ready.'
 
   /**
@@ -1503,7 +1543,7 @@ wss.on('connection', (socket) => {
       // keeps answers short enough to speak, and cuts cost per turn.
       // Read per session, so a fact learned in one conversation is known in the
       // next without restarting the bridge.
-      systemPrompt: SYSTEM_PROMPT + LANGUAGE_NOTE + memoryNote(),
+      systemPrompt: SYSTEM_PROMPT + LANGUAGE_NOTE + worldNote() + memoryNote(),
       // Run from the home directory so project-scoped MCP servers don't shadow
       // the global ones, and so file tools have a sane root.
       cwd: homedir(),
@@ -1530,6 +1570,12 @@ wss.on('connection', (socket) => {
       // without this line nothing in the project has a say at all.
       model: MODEL,
       effort: EFFORT,
+      // Connectors he has no use for, kept out of the prompt entirely. Every
+      // tool a server offers is described to the model on every turn whether
+      // or not it is ever called, so a design tool and a job board riding
+      // along with the mail and the calendar are paid for each time he is
+      // asked the time.
+      disallowedTools: DISABLED_SERVERS.map((name) => `mcp__${name}`),
       maxTurns: 24,
       permissionMode: 'default',
       // Without this the SDK only emits whole assistant messages, and JARVIS
@@ -1652,12 +1698,27 @@ wss.on('connection', (socket) => {
             // empty text is indistinguishable from a turn that simply had
             // nothing to say — the HUD stops spinning and JARVIS stands there
             // silent. Say what happened instead.
-            if (priming) {
+            // Claude could not answer — signed out, over its allowance,
+            // unreachable. With an understudy configured, he still answers:
+            // without tools, and saying so where the question needed them.
+            let understudy = null
+            if (!priming && !lastForDisplay && lastQuestion && geminiReady() && claudeFailed(msg)) {
+              console.warn(`[jarvis] Claude could not answer (${msg.subtype}); the small model is standing in`)
+              const answer = await quick(recent, lastQuestion, { standIn: true, notes: worldNote() + memoryNote() })
+              if (!answer.escalate) understudy = answer.text
+            }
+
+            if (understudy) {
+              note('model', understudy)
+              sendTurn({ type: 'text', delta: understudy })
+              sendTurn({ type: 'done', text: understudy, costUsd: msg.total_cost_usd ?? null, brain: 'gemini' })
+            } else if (priming) {
               // The warm-up is over, however it ended. Cleared here as well as
               // on the queue above, because an interrupt replaces that queue.
               priming = false
               console.log('[jarvis] session warm')
             } else if (msg.subtype === 'success') {
+              if (!lastForDisplay && msg.result) note('model', msg.result)
               sendTurn({
                 type: 'done',
                 text: NOT_LOGGED_IN.test(msg.result ?? '')
@@ -1736,14 +1797,53 @@ wss.on('connection', (socket) => {
        */
       const text = msg.text
       const id = typeof msg.id === 'string' ? msg.id : null
-      void settling.then(() => {
+      void settling.then(async () => {
+        const forDisplay = FOR_DISPLAY.test(text)
+
+        // The small model gets first refusal on anything that might not need
+        // the agent. It either answers, or says in one word that it cannot.
+        if (geminiReady() && !forDisplay) {
+          quickAbort = new AbortController()
+          const { signal } = quickAbort
+          const answer = await quick(recent, text, { notes: worldNote() + memoryNote(), signal })
+          quickAbort = null
+          // Interrupted while it was thinking: the user has moved on, and so
+          // has the client. Say nothing.
+          if (signal.aborted) return
+          if (!answer.escalate) {
+            console.log('[jarvis] answered by the small model')
+            note('user', text)
+            note('model', answer.text)
+            aside.push({ q: text, a: answer.text })
+            if (aside.length > 4) aside.shift()
+            send({ type: 'text', delta: answer.text, ask: id })
+            send({ type: 'done', text: answer.text, costUsd: 0, ask: id, brain: 'gemini' })
+            return
+          }
+          console.log(`[jarvis] passed to Claude (${answer.why})`)
+        }
+
         answering = id
+        lastQuestion = text
+        lastForDisplay = forDisplay
+        if (!forDisplay) note('user', text)
+
+        let forClaude = text
+        if (aside.length && !forDisplay) {
+          forClaude =
+            '(For context only — a few quick exchanges you handled since we last spoke: ' +
+            aside.map((x) => `they said "${x.q}", you answered "${x.a}"`).join('; ') +
+            '.)\n\n' +
+            text
+          aside = []
+        }
+
         if (deliver) {
           const resolve = deliver
           deliver = null
-          resolve(text)
+          resolve(forClaude)
         } else {
-          inbox.push(text)
+          inbox.push(forClaude)
         }
       })
     }
@@ -1758,6 +1858,7 @@ wss.on('connection', (socket) => {
     }
 
     if (msg.type === 'interrupt') {
+      quickAbort?.abort()
       // Held so the next question can wait for it rather than racing it.
       const stopped = turnFinished()
       settling = Promise.resolve(session.interrupt?.())
