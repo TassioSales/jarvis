@@ -82,7 +82,8 @@ if (-not $MainOnly) {
   }
 }
 
-function Wait-Window([string]$title, [int]$seconds = 20) {
+# Generous: the first load after the servers start has to build the page.
+function Wait-Window([string]$title, [int]$seconds = 45) {
   $deadline = (Get-Date).AddSeconds($seconds)
   while ((Get-Date) -lt $deadline) {
     $h = [JarvisWin]::Find($title)

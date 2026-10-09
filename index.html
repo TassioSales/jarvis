@@ -63,6 +63,20 @@
     />
 
     <title>J.A.R.V.I.S.</title>
+    <!--
+      A side monitor names its window before anything else loads. The launcher
+      finds each window by its title to put it on the right monitor, and until
+      the app has started every window would otherwise carry the same one —
+      which is how a satellite got taken for the main window and the set ended
+      up duplicated.
+    -->
+    <script>
+      ;(function () {
+        var q = new URLSearchParams(location.search)
+        var sat = q.get('sat')
+        if (sat) document.title = 'J.A.R.V.I.S. · ' + (q.get('slot') || (sat === 'telemetry' ? 'A' : 'B'))
+      })()
+    </script>
   </head>
   <body>
     <div id="root"></div>
