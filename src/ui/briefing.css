@@ -320,3 +320,61 @@
   text-align: center;
   color: var(--ink);
 }
+
+/* ---- the help card */
+
+.help {
+  z-index: 34;
+  grid-template-rows: minmax(0, 1fr);
+  background: radial-gradient(circle, rgb(1 6 12 / 0.6) 0%, rgb(1 6 12 / 0.88) 75%);
+}
+.help-card {
+  align-self: center;
+  width: min(1180px, 88vw);
+  max-height: 78vh;
+  overflow: hidden;
+  padding: clamp(18px, 2.8vmin, 36px);
+  animation: brief-in 0.45s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.help-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: clamp(14px, 2.4vmin, 30px) clamp(20px, 4vmin, 56px);
+}
+.help-card h3 {
+  margin: 0 0 clamp(6px, 1vmin, 12px);
+  padding-bottom: 6px;
+  border-bottom: 1px solid color-mix(in srgb, var(--interface) 30%, transparent);
+  font-size: clamp(11px, 1.4vmin, 15px);
+  font-weight: 600;
+  letter-spacing: 0.26em;
+  text-transform: uppercase;
+  color: var(--interface);
+}
+.help-card dl {
+  display: grid;
+  gap: clamp(5px, 0.9vmin, 10px);
+  margin: 0;
+}
+.help-card dl div {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  gap: 14px;
+  align-items: baseline;
+}
+.help-card dt {
+  font-size: clamp(13px, 1.9vmin, 20px);
+  color: var(--ink);
+}
+.help-card dd {
+  margin: 0;
+  font-size: clamp(11px, 1.5vmin, 16px);
+  color: var(--ink-2);
+}
+.help-keys {
+  margin-top: clamp(14px, 2.2vmin, 26px);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: clamp(10px, 1.25vmin, 13px);
+  letter-spacing: 0.14em;
+  color: var(--ink-3);
+}

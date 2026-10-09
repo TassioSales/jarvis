@@ -390,6 +390,14 @@ const NAME_POSSIBLE = 0.05
  */
 const ALWAYS_TRANSCRIBE_UNDER_MS = 3000
 
+/**
+ * Less sound than this in a segment and it was not a word. Set well under the
+ * shortest real utterance in the log, because the cost of the two mistakes is
+ * lopsided: a click sent for transcription wastes a request, a word thrown
+ * away is him not listening.
+ */
+const TOO_BRIEF_MS = 160
+
 // ---------------------------------------------------------------------------
 // A record of what he heard
 // ---------------------------------------------------------------------------
@@ -710,10 +718,25 @@ async function startElevenVoice(h: VoiceHandlers): Promise<Voice> {
       // chair: you asked, and he ignored you.
       if (mode === 'command') h.onSpeechStart()
     },
-    onEnd: (blob, ms) => {
+    onEnd: (blob, ms, voicedMs, loudest) => {
       const mode = h.mode()
       const peak = Math.round(namePeak * 1000) / 1000
-      voiceLog('segment', { mode, ms: Math.round(ms), bytes: blob.size, ...(wake ? { name: peak } : {}), ...meterNow() })
+      voiceLog('segment', {
+        mode,
+        ms: Math.round(ms),
+        voiced: Math.round(voicedMs),
+        loudest: Math.round(loudest * 1e4) / 1e4,
+        bytes: blob.size,
+        ...(wake ? { name: peak } : {}),
+        ...meterNow(),
+      })
+      // A knock, a key, a chair: loud for an instant and then nothing. The
+      // shortest thing anyone says to him is his name, and that is several
+      // times longer than this. Not worth a transcription.
+      if (voicedMs < TOO_BRIEF_MS) {
+        drop(`too brief to be speech (${Math.round(voicedMs)} ms of sound)`)
+        return
+      }
       // Standing by, with the detector running, and nothing in this segment
       // sounded like his name: it is the television, or the room. Not sent.
       if (wake && mode === 'wake' && namePeak < NAME_POSSIBLE && ms > ALWAYS_TRANSCRIBE_UNDER_MS) {

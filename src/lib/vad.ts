@@ -31,7 +31,7 @@ export type VadHandlers = {
   /** The signal crossed into speech. Instant; this is the barge-in trigger. */
   onStart: () => void
   /** Speech ended. The blob is one complete, decodable audio file. */
-  onEnd: (audio: Blob, ms: number) => void
+  onEnd: (audio: Blob, ms: number, voicedMs: number, peak: number) => void
   /** 0..1 smoothed input level, for the caption/orb while capturing. */
   onLevel: (v: number) => void
   /** Capture is impossible — no microphone, or no MediaRecorder support. */
@@ -161,6 +161,11 @@ export async function startVad(h: VadHandlers): Promise<Vad> {
   let speaking = false
   let speechStartedAt = 0
   let lastLoud = 0
+  /** Of the segment being recorded: how long it was actually loud, how loud
+   *  it got, and when the last frame was, to measure the first. */
+  let voicedMs = 0
+  let peak = 0
+  let lastTick = 0
   let raf = 0
 
   const rms = (): number => {
@@ -198,6 +203,8 @@ export async function startVad(h: VadHandlers): Promise<Vad> {
   const endSegment = () => {
     const rec = recorder
     const startedAt = speechStartedAt
+    const voiced = voicedMs
+    const loudest = peak
     speaking = false
     speechStartedAt = 0
     if (!rec) return
@@ -208,7 +215,7 @@ export async function startVad(h: VadHandlers): Promise<Vad> {
       const blob = new Blob(parts, { type })
       parts = []
       const ms = startedAt ? performance.now() - startedAt : 0
-      h.onEnd(blob, ms)
+      h.onEnd(blob, ms, voiced, loudest)
     }
     rec.onstop = finalise
     try {
@@ -258,6 +265,9 @@ export async function startVad(h: VadHandlers): Promise<Vad> {
           speaking = true
           speechStartedAt = armedAt
           lastLoud = now
+          // The time it took to confirm was sound too.
+          voicedMs = now - armedAt
+          peak = smoothEnergy
           h.onStart()
         }
       } else if (armedAt !== 0) {
@@ -266,7 +276,11 @@ export async function startVad(h: VadHandlers): Promise<Vad> {
         discardRecorder()
       }
     } else {
-      if (smoothEnergy > release) lastLoud = now
+      if (smoothEnergy > release) {
+        lastLoud = now
+        voicedMs += Math.min(100, now - lastTick)
+      }
+      if (smoothEnergy > peak) peak = smoothEnergy
       const quietFor = now - lastLoud
       const runFor = now - speechStartedAt
       if (quietFor >= SILENCE_MS || runFor >= MAX_MS) {
@@ -274,6 +288,7 @@ export async function startVad(h: VadHandlers): Promise<Vad> {
         endSegment()
       }
     }
+    lastTick = now
   }
 
   tick()

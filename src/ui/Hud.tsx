@@ -316,7 +316,7 @@ export function Hud() {
 
       <footer className="hud-bottom">
         <span className="hint">
-          {tr('say')} <b>{tr('“hey jarvis”')}</b> · <kbd>Space</kbd> {tr('to talk')} · <kbd>G</kbd> {tr('hands')} · <kbd>F</kbd> {tr('face')} · <kbd>L</kbd> {tr('lock')}
+          {tr('say')} <b>{tr('“hey jarvis”')}</b> · <kbd>Space</kbd> {tr('to talk')} · <kbd>G</kbd> {tr('hands')} · <kbd>F</kbd> {tr('face')} · <kbd>L</kbd> {tr('lock')} · <kbd>H</kbd> {tr('help')}
           {voice && (
             <>
               {' · '}

@@ -31,6 +31,7 @@ const PT: Record<string, string> = {
   hands: 'mãos',
   face: 'rosto',
   lock: 'bloquear',
+  help: 'ajuda',
   'CAMERA ON · G TO STOP': 'CÂMERA LIGADA · G PARA PARAR',
   LOOKING: 'OLHANDO',
 
@@ -87,6 +88,7 @@ const PT: Record<string, string> = {
   LOG: 'REGISTRO',
   WORLD: 'MUNDO',
   OVERVIEW: 'PANORAMA',
+  'These are the things you can ask me, sir.': 'Estes são os pedidos que o senhor pode me fazer.',
   'Sir, a reminder': 'Senhor, um lembrete',
   'Good morning': 'Bom dia',
   'CONFIRMATION REQUIRED': 'CONFIRMAÇÃO NECESSÁRIA',

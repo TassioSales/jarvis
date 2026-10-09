@@ -147,6 +147,8 @@ process.on('SIGTERM', () => shutdown(0))
  */
 const port = process.env.PORT
 const bridgeEnv = writes ? { JARVIS_ALLOW_WRITES: '1' } : {}
+// So the bridge can tell when this launcher is gone; see the watchdog in server.mjs.
+bridgeEnv.JARVIS_PARENT_PID = String(process.pid)
 if (port) {
   bridgeEnv.JARVIS_ALLOWED_ORIGINS = `http://localhost:${port},http://127.0.0.1:${port}`
   console.log(`  serving the face on port ${port}; the bridge will accept it.\n`)

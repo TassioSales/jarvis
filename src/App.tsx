@@ -7,6 +7,7 @@ import { Ignition } from './ui/Ignition'
 import { Lock } from './ui/Lock'
 import { Briefing } from './ui/Briefing'
 import { Consent } from './ui/Consent'
+import { Help } from './ui/Help'
 import { Diagnostics } from './ui/Diagnostics'
 import { useStore } from './store'
 import {
@@ -132,6 +133,9 @@ const ENROL_CMD =
 const YES_CMD =
   /^(?:sim|pode|podes|confirmo|confirmado|confirmar?|prossiga|prosseguir|autorizo|autorizado|fa[cç]a|manda|vai|claro|isso|yes|yeah|go ahead|do it|proceed|confirm)\b/i
 const NO_CMD = /^(?:n[aã]o|nunca|cancela|cancelar|cancele|negativo|pare|para|deixa|esquece|no|nope|cancel|stop|don'?t)\b/i
+/** Asking what he can do, which is answered on screen rather than by the model. */
+const HELP_CMD =
+  /^(?:ajuda|me ajuda|socorro|comandos|quais (?:s[aã]o )?os comandos|o que (?:voc[eê]|o senhor) (?:sabe|pode|consegue) fazer|help|commands|what can you do)[\s.?!]*$/i
 /** A greeting on its own is a request for the day (see briefing.ts). */
 const BRIEF_CMD =
   /^(?:(?:muito\s+)?bom dia|boa tarde|boa noite|good (?:morning|afternoon|evening)|briefing|resumo(?: do dia)?|como est[aá] o dia)(?:[\s,]+(?:senhor|jarvis|sir))?[\s.!?]*$/i
@@ -211,6 +215,7 @@ export default function App() {
     s.clearPanels()
     s.clearBlades()
     s.setBriefing(null)
+    s.setHelp(false)
     s.setCaption('')
     s.pushTurn({ id: newId(), role: 'user', text: said })
     s.setPhase('thinking')
@@ -432,6 +437,7 @@ export default function App() {
     s.clearPanels()
     s.clearBlades()
     s.setBriefing(null)
+    s.setHelp(false)
     s.setCaption('')
     s.pushTurn({ id: newId(), role: 'user', text: said })
     s.setPhase('thinking')
@@ -547,12 +553,27 @@ export default function App() {
     listen(FOLLOW_UP_MS)
   }
 
+  /** Put the list of things to say on screen, and say that it is there. */
+  const showHelp = async () => {
+    const mine = ++turn.current
+    clearIdle()
+    const s = store.getState()
+    s.setBriefing(null)
+    s.setHelp(true)
+    s.setPhase('speaking')
+    await announce('These are the things you can ask me, sir.')
+    if (mine !== turn.current) return
+    // Left up while he listens, so the next thing said can be read off it.
+    listen(AWAIT_SPEECH_MS)
+  }
+
   /** Everything he hears goes through here: the lock first, then the model. */
   const handle = (said: string) => {
     if (store.getState().locked) return void unlock(said)
     if (LOCK_CMD.test(said)) return void lock()
     if (ENROL_CMD.test(said)) return void enrolFace()
     if (BRIEF_CMD.test(said)) return void brief(said)
+    if (HELP_CMD.test(said)) return void showHelp()
     if ((UNLOCK_CMD.test(said) || IDENTIFY_CMD.test(said)) && face.enrolled()) {
       return void (async () => {
         ++turn.current
@@ -1163,6 +1184,17 @@ export default function App() {
         }
       }
 
+      // H shows what he can be asked, and hides it again; Escape hides it too.
+      if (!e.repeat && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        const st = store.getState()
+        if (e.key === 'h' && st.phase !== 'offline' && st.phase !== 'boot') {
+          e.preventDefault()
+          st.setHelp(!st.help)
+          return
+        }
+        if (e.key === 'Escape' && st.help) st.setHelp(false)
+      }
+
       // L locks, F enrols a face. Both are also spoken commands; the keys are
       // for when the room is too loud to give one.
       const idle = ['dormant', 'listening', 'waking'].includes(store.getState().phase)
@@ -1246,6 +1278,7 @@ export default function App() {
       <Hud />
       <Boot />
       <Briefing />
+      <Help />
       <Consent />
       <Lock />
       <Diagnostics />

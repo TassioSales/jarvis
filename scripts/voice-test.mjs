@@ -1,0 +1,97 @@
+// Checks the patterns that decide what he hears, against phrases that must and
+// must not match. Run with `npm run test:voice`.
+//
+// These patterns are read out of the source rather than imported, because the
+// files they live in also touch the microphone and the DOM. That is fragile in
+// one way — rename a constant and this fails loudly — and that is the point.
+import { readFileSync } from 'node:fs'
+
+const read = (file) => readFileSync(new URL(`../src/${file}`, import.meta.url), 'utf8')
+const voice = read('lib/voice.ts')
+const app = read('App.tsx')
+
+/** The source text of `const NAME = <expression>`, up to the next declaration. */
+function source(text, name) {
+  const m = new RegExp(`const ${name} =\\s*([\\s\\S]*?)\\n(?=/\\*\\*|const |export |\\n)`).exec(text)
+  if (!m) throw new Error(`could not find ${name}`)
+  return m[1].trim()
+}
+
+const NAME_PATTERN = eval(source(voice, 'NAME_PATTERN'))
+const HAIL_PATTERN = eval(source(voice, 'HAIL_PATTERN'))
+const WAKE = new RegExp(`\\b${HAIL_PATTERN}?\\s*${NAME_PATTERN}\\b(?!'s)`, 'i')
+const GREETING = eval(source(voice, 'GREETING'))
+
+// App.tsx builds some of its patterns from these two.
+const NAME = NAME_PATTERN
+const HAIL = HAIL_PATTERN
+void HAIL
+const THING = eval(source(app, 'THING'))
+void THING
+const patterns = { WAKE, GREETING }
+for (const name of ['UP_TO_NAME', 'STOP_CMD', 'BARE_STOP', 'LOCK_CMD', 'UNLOCK_CMD', 'ENROL_CMD', 'IDENTIFY_CMD', 'BRIEF_CMD', 'HELP_CMD', 'YES_CMD', 'NO_CMD']) {
+  patterns[name] = eval(source(app, name))
+}
+void NAME
+
+const cases = {
+  WAKE: {
+    yes: ['Jarvis', 'jarvis, que horas são?', 'Ei, Jarvis', 'Jarves', 'Jarvez', 'Jarviz', 'Jarbis', 'Javis', 'Jervis', 'Jairvis', 'Djarvis', 'Járvis', 'Jarbas', 'Charvis', 'Travis', 'ô Jarvis', 'Oi Jarvis, bom dia', 'Daves', 'Dávis'],
+    no: ['já vi esse filme', 'a jarra está cheia', 'vou viajar amanhã', 'que horas são', 'chaves do carro', 'o javali', 'java é uma linguagem', 'jardim', 'a televisão está alta', 'serviço', 'devo ir'],
+  },
+  GREETING: {
+    yes: ['Bom dia.', 'Boa tarde', 'boa noite, senhor', 'Good morning'],
+    no: ['e boa noite para vocês', 'bom dia a todos os ouvintes do programa', 'que dia bom'],
+  },
+  BARE_STOP: {
+    yes: ['Chega.', 'Pare', 'pode parar', 'cancela', 'silêncio'],
+    no: ['para', 'isso é para você', 'pare de falar sobre o tempo e me diga as horas'],
+  },
+  LOCK_CMD: { yes: ['bloquear', 'Bloquear os monitores.', 'travar tudo'], no: ['bloquear o site da concorrência', 'bloqueio'] },
+  UNLOCK_CMD: { yes: ['ativar monitor', 'Ativar os monitores.', 'desbloquear'], no: ['ativar o modo noturno', 'ativa o alarme das seis'] },
+  ENROL_CMD: { yes: ['cadastrar meu rosto', 'Cadastrar o meu rosto.', 'registrar rosto', 'cadastrar reconhecimento facial'], no: ['cadastrar um cliente', 'meu rosto está cansado'] },
+  IDENTIFY_CMD: { yes: ['sou eu', 'confirmar identidade'], no: ['sou eu que mando aqui e quero saber as horas'] },
+  BRIEF_CMD: { yes: ['Bom dia', 'bom dia, Jarvis', 'boa tarde', 'briefing', 'resumo do dia'], no: ['bom dia, que horas são?', 'me dá um resumo do e-mail do banco'] },
+  HELP_CMD: { yes: ['ajuda', 'comandos', 'o que você sabe fazer?', 'help'], no: ['me ajuda a escrever um e-mail', 'ajuda o cliente'] },
+  YES_CMD: { yes: ['sim', 'Sim, pode.', 'confirmo', 'prossiga'], no: ['não', 'talvez', 'espera'] },
+  NO_CMD: { yes: ['não', 'Não, cancela.', 'negativo'], no: ['sim', 'pode'] },
+}
+
+let failures = 0
+let checks = 0
+for (const [name, { yes, no }] of Object.entries(cases)) {
+  const re = patterns[name]
+  for (const text of yes) {
+    checks++
+    if (!re.test(text)) {
+      failures++
+      console.log(`${name} should match:      ${JSON.stringify(text)}`)
+    }
+  }
+  for (const text of no) {
+    checks++
+    if (re.test(text)) {
+      failures++
+      console.log(`${name} should NOT match:  ${JSON.stringify(text)}`)
+    }
+  }
+}
+
+// While he is busy, only what is addressed to him by name gets through.
+for (const [text, expected] of [
+  ['a televisão está alta', 'ignored'],
+  ['Jarvis, pare.', 'stop'],
+  ['ei Jarvis cancela isso', 'stop'],
+  ['então Jarvis, que horas são?', 'order: que horas são?'],
+]) {
+  checks++
+  const order = patterns.UP_TO_NAME.test(text) ? text.replace(patterns.UP_TO_NAME, '').trim() : null
+  const got = order === null ? 'ignored' : !order || patterns.STOP_CMD.test(order) ? 'stop' : `order: ${order}`
+  if (got !== expected) {
+    failures++
+    console.log(`while busy, ${JSON.stringify(text)} gave "${got}", expected "${expected}"`)
+  }
+}
+
+console.log(failures ? `${failures} of ${checks} checks failed` : `all ${checks} checks pass`)
+process.exit(failures ? 1 : 0)

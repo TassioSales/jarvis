@@ -42,6 +42,28 @@ import { isAbsolute, join, relative, resolve as resolvePath } from 'node:path'
 import { openRemote, proxyError, vetTarget, PROXY_UA } from './net.mjs'
 import { probeUrl, renderPage } from './page.mjs'
 
+/**
+ * Do not outlive the launcher.
+ *
+ * Closing the launcher's window on Windows kills it outright — no signal, no
+ * chance to stop its children — and this process was left running, holding
+ * port 8787 with no interface attached. The next start then failed on a port
+ * already in use, and from the outside he simply would not come up. Checking
+ * that the parent still exists is crude, and it is the one thing that works
+ * whatever way the parent went.
+ */
+const parentPid = Number(process.env.JARVIS_PARENT_PID)
+if (parentPid) {
+  setInterval(() => {
+    try {
+      process.kill(parentPid, 0)
+    } catch {
+      console.log('[jarvis] the launcher is gone; stopping')
+      process.exit(0)
+    }
+  }, 4000).unref()
+}
+
 const PORT = Number(process.env.JARVIS_BRIDGE_PORT ?? 8787)
 
 /**

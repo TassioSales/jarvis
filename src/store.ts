@@ -234,6 +234,8 @@ type State = {
   /** The briefing being read out: its cards so far, which one is up, and the
    *  sentence being spoken. Null whenever there is no briefing on screen. */
   briefing: { cards: BriefCard[]; active: number; caption: string } | null
+  /** Whether the list of things he can be asked is on screen. */
+  help: boolean
   /** An action he is waiting for leave to take, while the question is open. */
   consent: { tool: string; detail: string } | null
   /** Whether he is waiting on a face before answering to anyone. */
@@ -258,6 +260,7 @@ type State = {
   setLocked: (locked: boolean) => void
   setBriefing: (briefing: State['briefing']) => void
   setConsent: (consent: State['consent']) => void
+  setHelp: (help: boolean) => void
   setIdentity: (identity: State['identity']) => void
   pushPanel: (p: Panel) => void
   clearPanels: () => void
@@ -304,6 +307,7 @@ export const useStore = create<State>((set) => ({
   identity: 'idle',
   briefing: null,
   consent: null,
+  help: false,
   ui: defaultUi(),
 
   setVoice: (voice) => set({ voice }),
@@ -313,6 +317,7 @@ export const useStore = create<State>((set) => ({
   setLocked: (locked) => set({ locked }),
   setBriefing: (briefing) => set({ briefing }),
   setConsent: (consent) => set({ consent }),
+  setHelp: (help) => set({ help }),
   setIdentity: (identity) => set({ identity }),
   // Three is as many as fits around the reactor without crowding it. Sticky
   // panels are exempt from the cull — the tool description promises they stay
