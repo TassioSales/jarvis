@@ -1,8 +1,9 @@
-import { BRIDGE_HTTP_URL, LANG, VOICE_LOG } from '../config'
+import { BRIDGE_HTTP_URL, LANG, VOICE_LOG, WAKE_WORD } from '../config'
 import { getMic } from './audio'
 import { speakingNow, speakingSince } from './tts'
 import { startVad, type Vad } from './vad'
 import { caps } from './capabilities'
+import { startWake, type Wake } from './wake'
 
 /**
  * The voice loop.
@@ -41,6 +42,10 @@ export type VoiceHandlers = {
    *  `trailing` is whatever followed it, so "Jarvis, what's the weather" is
    *  one breath rather than two turns. */
   onWake: (trailing: string) => void
+  /** His name was heard by the on-device detector, before any transcript
+   *  exists. Returns false to decline — when he is locked, say — in which case
+   *  the transcript decides as it always did. */
+  onName?: () => boolean
   /** The user has genuinely started talking. This is the barge-in trigger. */
   onSpeechStart: () => void
   /** Live transcript, for the caption under the reactor. */
@@ -352,6 +357,32 @@ function isEcho(heard: string, spoken: string): boolean {
 }
 
 // ---------------------------------------------------------------------------
+// The on-device wake word
+// ---------------------------------------------------------------------------
+
+/**
+ * A score at or above this is his name, said on its own, and wakes him at once.
+ * Measured against the detector's own test clips: the name alone scores 0.99,
+ * ordinary sentences under 0.01.
+ */
+const NAME_CERTAIN = 0.5
+/**
+ * His name run straight into a request — "Jarvis, que horas são" — scores far
+ * lower, around 0.3, because the network was trained on the name followed by a
+ * pause. That is not enough to act on, but it is plenty to say "this segment
+ * is worth transcribing", and the transcript then settles it. Everything
+ * scoring under this is the room talking to itself, and is not uploaded.
+ */
+const NAME_POSSIBLE = 0.05
+/**
+ * Short segments are transcribed whatever they scored. The detector has only
+ * been measured against one voice so far; until the log shows how it does with
+ * its owner's, a short utterance is cheap to send and too likely to be a real
+ * call to drop on a network's say-so.
+ */
+const ALWAYS_TRANSCRIBE_UNDER_MS = 3000
+
+// ---------------------------------------------------------------------------
 // A record of what he heard
 // ---------------------------------------------------------------------------
 
@@ -602,9 +633,42 @@ async function startElevenVoice(h: VoiceHandlers): Promise<Voice> {
     }
   }
 
+  /**
+   * The on-device detector, when it is switched on and loads. It runs beside
+   * the energy gate rather than instead of it: the gate still cuts the audio
+   * into segments, this only says whether a segment had his name in it — and,
+   * when the name was said on its own, wakes him without waiting for the
+   * segment to end at all.
+   */
+  let namePeak = 0
+  let wake: Wake | null = null
+  if (WAKE_WORD === 'local') {
+    try {
+      wake = await startWake(await getMic(), (score) => {
+        if (score > namePeak) namePeak = score
+        if (
+          score >= NAME_CERTAIN &&
+          h.mode() === 'wake' &&
+          Date.now() - lastWake > WAKE_DEBOUNCE &&
+          h.onName?.()
+        ) {
+          lastWake = Date.now()
+          diag.wakes++
+          diag.dropped = ''
+          voiceLog('name', { score: Math.round(score * 1000) / 1000 })
+        }
+      })
+      console.info('[jarvis] listening for his name on this machine')
+    } catch (err) {
+      // Not fatal: without it he hears his name the way he always did.
+      console.warn('[jarvis] on-device wake word unavailable, using transcripts only:', err)
+    }
+  }
+
   vad = await startVad({
     onStart: () => {
       const mode = h.mode()
+      namePeak = 0
       diag.mode = mode
       diag.sessions++
       if (mode === 'deaf') return
@@ -624,7 +688,15 @@ async function startElevenVoice(h: VoiceHandlers): Promise<Voice> {
       }
     },
     onEnd: (blob, ms) => {
-      voiceLog('segment', { mode: h.mode(), ms: Math.round(ms), bytes: blob.size, ...meterNow() })
+      const mode = h.mode()
+      const peak = Math.round(namePeak * 1000) / 1000
+      voiceLog('segment', { mode, ms: Math.round(ms), bytes: blob.size, ...(wake ? { name: peak } : {}), ...meterNow() })
+      // Standing by, with the detector running, and nothing in this segment
+      // sounded like his name: it is the television, or the room. Not sent.
+      if (wake && mode === 'wake' && namePeak < NAME_POSSIBLE && ms > ALWAYS_TRANSCRIBE_UNDER_MS) {
+        drop(`not his name (scored ${peak}); not transcribed`)
+        return
+      }
       pendingAudio.push(blob)
       void drain()
     },
@@ -664,6 +736,7 @@ async function startElevenVoice(h: VoiceHandlers): Promise<Voice> {
     stop: () => {
       clearInterval(guardPoll)
       if (meterLog) clearInterval(meterLog)
+      wake?.stop()
       assemble.cancel()
       vad?.stop()
       diag.running = false

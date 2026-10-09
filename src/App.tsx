@@ -144,6 +144,9 @@ export default function App() {
   const turn = useRef(0)
   const booting = useRef(false)
   const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  /** When the on-device detector last heard his name, so the transcript of
+   *  that same breath can be told from a name said mid-conversation. */
+  const nameAt = useRef(0)
   /** Settles the open "shall I proceed" question, if there is one. */
   const consent = useRef<((ok: boolean) => void) | null>(null)
   const voicePoll = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -569,6 +572,22 @@ export default function App() {
   }
 
   /**
+   * The on-device detector heard his name. No words exist yet — only that he
+   * was called — so this opens the microphone and shows that he is listening,
+   * and lets the transcript that follows say what was wanted. Declined while
+   * locked: there the whole sentence matters, and the transcript carries it.
+   */
+  const onName = () => {
+    const s = store.getState()
+    if (s.locked || s.phase !== 'dormant') return false
+    s.setError(null)
+    sfx.play('wake')
+    nameAt.current = Date.now()
+    listen(AWAIT_SPEECH_MS)
+    return true
+  }
+
+  /**
    * Someone started talking. This is the whole point of the rewrite: he stops,
    * immediately, whatever he was doing.
    */
@@ -636,6 +655,15 @@ export default function App() {
     // People keep using his name as a vocative once they're already talking to
     // him. Strip it rather than sending "jarvis" to the model as a question.
     if (BARE_NAME.test(text)) {
+      // His name and nothing else. If this is the breath that woke him, he
+      // answers to it; said again mid-conversation, it is only a vocative.
+      if (Date.now() - nameAt.current < 8000) {
+        nameAt.current = 0
+        const greeting = createSpeaker()
+        speaker.current = greeting
+        greeting.say(attention())
+        void greeting.end()
+      }
       listen(AWAIT_SPEECH_MS)
       return
     }
@@ -887,6 +915,7 @@ export default function App() {
     voice.current = await startVoice({
       mode,
       onWake,
+      onName,
       onSpeechStart,
       onPartial,
       onUtterance,

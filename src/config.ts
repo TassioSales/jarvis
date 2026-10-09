@@ -140,6 +140,23 @@ export const KOKORO_VOICE = choice(
 export const LANG = str(import.meta.env.VITE_JARVIS_LANG) ?? 'en-GB'
 
 /**
+ * How he hears his name.
+ *
+ *   'cloud' — every sound in the room is transcribed and the transcript
+ *             searched for "Jarvis". Accurate, and it means the room is being
+ *             sent to a speech service all day.
+ *   'local' — a small network in the page listens for the name itself
+ *             (src/lib/oww.ts). He answers the moment it is said, and what is
+ *             plainly not his name is never uploaded at all.
+ */
+export const WAKE_WORD = choice(
+  'VITE_JARVIS_WAKE',
+  import.meta.env.VITE_JARVIS_WAKE,
+  ['cloud', 'local'] as const,
+  'cloud',
+)
+
+/**
  * Which orb sits at the centre.
  *
  *   'reactor' — the machined arc reactor the project shipped with.
