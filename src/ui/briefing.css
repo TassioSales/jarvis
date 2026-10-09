@@ -277,3 +277,46 @@
     animation: none;
   }
 }
+
+/* ---- the consent question: the same card, in the colour of a warning */
+
+.consent {
+  z-index: 35;
+  grid-template-rows: minmax(0, 1fr);
+  background: radial-gradient(circle, rgb(1 6 12 / 0.55) 0%, rgb(1 6 12 / 0.82) 75%);
+}
+.consent-card {
+  --interface: #ffb347;
+}
+.consent-detail {
+  margin: clamp(12px, 2vmin, 22px) 0 0;
+  padding: 12px 14px;
+  border-left: 2px solid var(--interface);
+  background: rgb(0 0 0 / 0.35);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: clamp(12px, 1.6vmin, 17px);
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--ink);
+}
+.consent-keys {
+  display: flex;
+  gap: clamp(16px, 3vmin, 36px);
+  margin-top: clamp(14px, 2.2vmin, 26px);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: clamp(11px, 1.4vmin, 15px);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+.consent-keys kbd {
+  display: inline-block;
+  min-width: 1.9em;
+  margin-right: 8px;
+  padding: 2px 6px;
+  border: 1px solid var(--interface);
+  font: inherit;
+  text-align: center;
+  color: var(--ink);
+}

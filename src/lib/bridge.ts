@@ -34,6 +34,9 @@ type Frame = {
   mode?: string
   seconds?: number
   when?: string
+  /** On a `confirm` frame: what he wants to do, and to what. */
+  tool?: string
+  detail?: string
   servers?: Array<string | { name?: string }>
 }
 
@@ -77,6 +80,14 @@ export type CaptureRequest = {
   when: 'now' | 'past'
 }
 export type CaptureResult = { data?: string; mimeType?: string; error?: string }
+
+/** The bridge asking whether an action may go ahead; see the consent gate in
+ *  bridge/server.mjs. Answered with a plain yes or no. */
+export type ConfirmRequest = { tool: string; detail: string }
+let onConfirm: ((req: ConfirmRequest) => Promise<boolean>) | null = null
+export function watchConfirm(fn: (req: ConfirmRequest) => Promise<boolean>) {
+  onConfirm = fn
+}
 
 let onCapture: ((req: CaptureRequest) => Promise<CaptureResult>) | null = null
 export function watchCapture(fn: (req: CaptureRequest) => Promise<CaptureResult>) {
@@ -203,6 +214,18 @@ function dispatch(ws: WebSocket) {
           .then(reply)
           .catch((err) => reply({ error: String(err?.message ?? err) }))
       }
+    } else if (msg.type === 'confirm' && msg.id) {
+      const id = msg.id
+      const answer = (ok: boolean) => {
+        if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'reply', id, ok }))
+      }
+      // No handler, or a handler that throws, is a no. The bridge treats
+      // silence the same way; this just gets it the answer sooner.
+      if (!onConfirm) answer(false)
+      else
+        onConfirm({ tool: String(msg.tool ?? ''), detail: String(msg.detail ?? '') })
+          .then(answer)
+          .catch(() => answer(false))
     } else if (msg.type === 'ui' && msg.op) {
       // A `ui` frame with no args is normal — reset and clear take none — so an
       // absent args object is an empty one, not a reason to drop the command.

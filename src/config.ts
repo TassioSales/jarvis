@@ -140,6 +140,19 @@ export const KOKORO_VOICE = choice(
 export const LANG = str(import.meta.env.VITE_JARVIS_LANG) ?? 'en-GB'
 
 /**
+ * Which orb sits at the centre.
+ *
+ *   'reactor' — the machined arc reactor the project shipped with.
+ *   'plasma'  — a ring of drifting filaments (src/scene/Plasma.tsx).
+ */
+export const ORB = choice(
+  'VITE_JARVIS_ORB',
+  import.meta.env.VITE_JARVIS_ORB,
+  ['reactor', 'plasma'] as const,
+  'reactor',
+)
+
+/**
  * Write everything the voice loop hears and decides to ~/.jarvis/voice.log.
  * For working out why he did not respond; see voiceLog in voice.ts. Off by
  * default — it is a transcript of the room.

@@ -1896,3 +1896,14 @@ kbd {
   transform: scaleX(-1);
   background: #000;
 }
+
+/* The filament orb (src/scene/Plasma.tsx): centred over the scene, under the HUD. */
+.plasma {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  width: min(86vmin, 900px);
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}

@@ -234,6 +234,8 @@ type State = {
   /** The briefing being read out: its cards so far, which one is up, and the
    *  sentence being spoken. Null whenever there is no briefing on screen. */
   briefing: { cards: BriefCard[]; active: number; caption: string } | null
+  /** An action he is waiting for leave to take, while the question is open. */
+  consent: { tool: string; detail: string } | null
   /** Whether he is waiting on a face before answering to anyone. */
   locked: boolean
   /** Where the identity check currently stands; drives the lock's animation. */
@@ -255,6 +257,7 @@ type State = {
   setBootNote: (n: string) => void
   setLocked: (locked: boolean) => void
   setBriefing: (briefing: State['briefing']) => void
+  setConsent: (consent: State['consent']) => void
   setIdentity: (identity: State['identity']) => void
   pushPanel: (p: Panel) => void
   clearPanels: () => void
@@ -300,6 +303,7 @@ export const useStore = create<State>((set) => ({
   locked: false,
   identity: 'idle',
   briefing: null,
+  consent: null,
   ui: defaultUi(),
 
   setVoice: (voice) => set({ voice }),
@@ -308,6 +312,7 @@ export const useStore = create<State>((set) => ({
   setBootNote: (bootNote) => set({ bootNote }),
   setLocked: (locked) => set({ locked }),
   setBriefing: (briefing) => set({ briefing }),
+  setConsent: (consent) => set({ consent }),
   setIdentity: (identity) => set({ identity }),
   // Three is as many as fits around the reactor without crowding it. Sticky
   // panels are exempt from the cull — the tool description promises they stay

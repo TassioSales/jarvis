@@ -1,10 +1,12 @@
 import { useEffect, useRef } from 'react'
 import { Scene } from './scene/Scene'
+import { Plasma } from './scene/Plasma'
 import { Hud } from './ui/Hud'
 import { Boot } from './ui/Boot'
 import { Ignition } from './ui/Ignition'
 import { Lock } from './ui/Lock'
 import { Briefing } from './ui/Briefing'
+import { Consent } from './ui/Consent'
 import { Diagnostics } from './ui/Diagnostics'
 import { useStore } from './store'
 import {
@@ -30,7 +32,7 @@ import {
   type Scene as BriefScene,
 } from './lib/briefing'
 import * as kokoro from './lib/kokoro'
-import { TTS_ENGINE } from './config'
+import { ORB, TTS_ENGINE } from './config'
 import { forTool, attention } from './lib/fillers'
 import {
   ask,
@@ -40,6 +42,7 @@ import {
   watchPanels,
   watchBlades,
   watchCapture,
+  watchConfirm,
   watchUi,
   watchConnection,
   connectedLabels,
@@ -115,6 +118,10 @@ const UNLOCK_CMD = new RegExp(
 )
 const ENROL_CMD =
   /^(?:cadastrar|cadastre|cadastra|registrar|registre|registra|gravar|grave|salvar|salve|aprender|aprenda|reconhecer|reconhe[cç]a|enrol|enroll|register|learn)\s+(?:o\s+|a\s+)?(?:(?:meu|minha|my)\s+)?(?:rosto|face|cara|reconhecimento facial|biometria)[\s.!]*$/i
+/** Answers to "shall I proceed". Anything that is neither is not an answer. */
+const YES_CMD =
+  /^(?:sim|pode|podes|confirmo|confirmado|confirmar?|prossiga|prosseguir|autorizo|autorizado|fa[cç]a|manda|vai|claro|isso|yes|yeah|go ahead|do it|proceed|confirm)\b/i
+const NO_CMD = /^(?:n[aã]o|nunca|cancela|cancelar|cancele|negativo|pare|para|deixa|esquece|no|nope|cancel|stop|don'?t)\b/i
 /** A greeting on its own is a request for the day (see briefing.ts). */
 const BRIEF_CMD =
   /^(?:(?:muito\s+)?bom dia|boa tarde|boa noite|good (?:morning|afternoon|evening)|briefing|resumo(?: do dia)?|como est[aá] o dia)(?:[\s,]+(?:senhor|jarvis|sir))?[\s.!?]*$/i
@@ -137,6 +144,8 @@ export default function App() {
   const turn = useRef(0)
   const booting = useRef(false)
   const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  /** Settles the open "shall I proceed" question, if there is one. */
+  const consent = useRef<((ok: boolean) => void) | null>(null)
   const voicePoll = useRef<ReturnType<typeof setInterval> | null>(null)
 
   // -- helpers --------------------------------------------------------------
@@ -599,6 +608,16 @@ export default function App() {
     const phase = store.getState().phase
     if (phase === 'offline' || phase === 'boot' || phase === 'dormant') return
 
+    // He has asked whether to go ahead, and this is the answer. It needs no
+    // name — he asked — and anything that is neither yes nor no is ignored
+    // rather than guessed at, since guessing wrong here sends the email.
+    if (consent.current) {
+      const answer = text.replace(UP_TO_NAME, '').trim() || text.trim()
+      if (YES_CMD.test(answer)) consent.current(true)
+      else if (NO_CMD.test(answer)) consent.current(false)
+      return
+    }
+
     // Busy: only something addressed to him by name gets through. Everything
     // else heard meanwhile is dropped, not queued — an overheard remark that
     // surfaced as a question a minute later would be worse than a missed one.
@@ -741,6 +760,35 @@ export default function App() {
         store.getState().setLooking(null)
       }
     })
+
+    /**
+     * JARVIS asking leave to do something.
+     *
+     * The action is put on screen and asked aloud, and nothing proceeds until
+     * there is a yes — spoken, or the Y key. Silence, a no, the N key and
+     * Escape all mean no, and so does the question going unanswered.
+     */
+    watchConfirm(
+      (req) =>
+        new Promise<boolean>((resolve) => {
+          const settle = (ok: boolean) => {
+            clearTimeout(timer)
+            consent.current = null
+            store.getState().setConsent(null)
+            sfx.play(ok ? 'done' : 'error')
+            resolve(ok)
+          }
+          // A little inside the bridge's own limit, so the refusal comes from
+          // here with the card still up rather than from a timeout nobody saw.
+          const timer = setTimeout(() => settle(false), 28_000)
+          consent.current = settle
+          store.getState().setConsent(req)
+          const spk = createSpeaker()
+          speaker.current = spk
+          spk.say(tr('Shall I proceed, sir?'))
+          void spk.end()
+        }),
+    )
 
     // The interface is JARVIS's to drive. These arrive out of band, pushed
     // mid-turn the way panels are, so a command can retint the reactor or put
@@ -889,6 +937,30 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase])
 
+  // -- starting by himself --------------------------------------------------
+
+  /**
+   * `?auto=1` switches him on without the click, for when he is opened by the
+   * machine at login rather than by a person.
+   *
+   * A browser only allows sound after a click unless it was started with the
+   * flag that waives that (the launcher passes it). So this asks first: if an
+   * audio context will not run, it leaves the button where it is. Trying anyway
+   * would hang on the audio unlock with the button already disabled.
+   */
+  useEffect(() => {
+    if (!new URLSearchParams(location.search).has('auto')) return
+    const probe = new AudioContext()
+    void probe.resume().catch(() => {})
+    const timer = setTimeout(() => {
+      const allowed = probe.state === 'running'
+      void probe.close()
+      if (allowed) void powerOn()
+    }, 700)
+    return () => clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   // -- side monitors --------------------------------------------------------
 
   // Whatever is open on the other monitors follows this window's state.
@@ -977,6 +1049,16 @@ export default function App() {
       // model entirely. When "I can't hear him" is the report, this is the one
       // keypress that separates a broken voice engine from a broken voice loop
       // — and it prints the verdict rather than making you infer it.
+      // Y and N answer an open "shall I proceed"; Escape is also a no.
+      if (consent.current && !e.repeat && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        const k = e.key.toLowerCase()
+        if (k === 'y' || k === 's' || k === 'n' || k === 'escape') {
+          e.preventDefault()
+          consent.current(k === 'y' || k === 's')
+          return
+        }
+      }
+
       // L locks, F enrols a face. Both are also spoken commands; the keys are
       // for when the room is too loud to give one.
       const idle = ['dormant', 'listening', 'waking'].includes(store.getState().phase)
@@ -1056,9 +1138,11 @@ export default function App() {
   return (
     <>
       <Scene />
+      {ORB === 'plasma' && <Plasma />}
       <Hud />
       <Boot />
       <Briefing />
+      <Consent />
       <Lock />
       <Diagnostics />
       <Ignition onStart={() => void powerOn()} />

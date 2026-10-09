@@ -84,6 +84,11 @@ export function watchCapture(
   if (usingBridge) bridge.watchCapture(fn)
 }
 
+/** The bridge asking leave to act. Bridge-only: nothing else can act. */
+export function watchConfirm(fn: (req: bridge.ConfirmRequest) => Promise<boolean>): void {
+  if (usingBridge) bridge.watchConfirm(fn)
+}
+
 /**
  * Barge-in. Stops the answer on both paths and settles whatever `ask()` call
  * is outstanding, so the caller's await always returns — on the bridge by

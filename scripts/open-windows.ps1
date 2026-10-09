@@ -13,7 +13,9 @@
 param(
   [string]$Url = 'http://localhost:5173',
   # Leave the side monitors alone and open only the main window.
-  [switch]$MainOnly
+  [switch]$MainOnly,
+  # Switch him on without waiting for the click on INICIAR. Used at login.
+  [switch]$Auto
 )
 
 Add-Type -AssemblyName System.Windows.Forms
@@ -64,7 +66,8 @@ $others = @($screens | Where-Object { -not $_.Primary } | Sort-Object { $_.Bound
 # The dashboard goes on the larger of the side monitors when there is a
 # choice. Windows are titled by slot (A, B), not by what they show, because
 # each can be switched to another view from its own header.
-$plan = @(@{ Title = 'J.A.R.V.I.S.'; Path = '/'; Screen = $primary })
+$mainPath = if ($Auto) { '/?auto=1' } else { '/' }
+$plan = @(@{ Title = 'J.A.R.V.I.S.'; Path = $mainPath; Screen = $primary })
 # The titles carry a middle dot; spelled as a code point so this file stays
 # plain ASCII and reads the same whatever encoding PowerShell assumes.
 $dot = [char]0x00B7
@@ -107,6 +110,9 @@ foreach ($item in $plan) {
     # when it joins one already running; the move below covers both.
     Start-Process -FilePath $browser -ArgumentList @(
       "--app=$Url$($item.Path)",
+      # Lets the page play sound without a click. Only honoured when this
+      # starts the browser, which at login it does; harmless otherwise.
+      '--autoplay-policy=no-user-gesture-required',
       "--window-position=$($b.X + 40),$($b.Y + 40)",
       "--window-size=$([Math]::Min(1200, $b.Width - 80)),$([Math]::Min(760, $b.Height - 80))"
     )
