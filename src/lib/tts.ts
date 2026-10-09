@@ -5,6 +5,8 @@ import {
   TTS_ENGINE,
   KOKORO_VOICE,
   BRIDGE_HTTP_URL,
+  LANG,
+  LANG_BASE,
 } from '../config'
 import * as kokoro from './kokoro'
 import { caps } from './capabilities'
@@ -174,6 +176,8 @@ const VOICE_PREF_KEY = 'jarvis.voice'
  * Voice → Manage Voices) and once installed it appears here automatically.
  */
 function score(v: SpeechSynthesisVoice): number {
+  if (LANG_BASE !== 'en') return scoreLocal(v)
+
   const n = v.name.toLowerCase()
   let s = 0
 
@@ -204,6 +208,39 @@ function score(v: SpeechSynthesisVoice): number {
   return s
 }
 
+/** Male voice names per language, for the systems that ship more than one. */
+const LOCAL_MALE: Record<string, RegExp> = {
+  pt: /\b(antonio|antônio|daniel|duarte|francisco|julio|júlio|fabio|fábio|donato|humberto|nicolau|valerio|valério)\b/,
+}
+
+/**
+ * The same ranking for a language other than English.
+ *
+ * There is no Daniel to aim for here, so it scores what can be read off any
+ * voice: that it speaks the language at all, that it is the right regional
+ * variant, that it is one of the neural voices rather than a decade-old
+ * concatenative one, and that it is male. Speaking the language is worth more
+ * than USABLE on its own — a machine with a single Portuguese voice should use
+ * it rather than fall back to an English one reading Portuguese.
+ */
+function scoreLocal(v: SpeechSynthesisVoice): number {
+  const n = v.name.toLowerCase()
+  const lang = v.lang.toLowerCase().replace('_', '-')
+  if (!lang.startsWith(LANG_BASE)) return -200
+
+  let s = 50
+  if (lang === LANG.toLowerCase()) s += 25
+  // Edge's "Online (Natural)" voices are the only good ones Windows has.
+  if (n.includes('natural')) s += 40
+  else if (/premium|enhanced|online/.test(n)) s += 20
+  if (LOCAL_MALE[LANG_BASE]?.test(n)) s += 30
+  return s
+}
+
+/** Whether a voice speaks the configured language, whatever its region. */
+const speaksIt = (v: SpeechSynthesisVoice) =>
+  v.lang.toLowerCase().startsWith(LANG_BASE)
+
 /** Only voices that scored on a name match, not merely on being English —
  *  otherwise the picker cycles through a dozen US novelty voices. */
 const USABLE = 40
@@ -212,7 +249,7 @@ const USABLE = 40
 export function candidateVoices(): SpeechSynthesisVoice[] {
   return speechSynthesis
     .getVoices()
-    .filter((v) => /^en/i.test(v.lang))
+    .filter(speaksIt)
     .map((v) => ({ v, s: score(v) }))
     .filter((x) => x.s >= USABLE)
     .sort((a, b) => b.s - a.s)
@@ -231,12 +268,15 @@ function pickVoice(): SpeechSynthesisVoice | null {
   // if that voice is ever reinstalled.
   const saved = localStorage.getItem(VOICE_PREF_KEY)
   if (saved) {
-    const hit = all.find((v) => v.name === saved)
+    // It also has to speak the configured language. A choice saved while he
+    // spoke English otherwise outlives the switch, and he reads Portuguese
+    // aloud in an American voice until someone thinks to press V.
+    const hit = all.find((v) => v.name === saved && speaksIt(v))
     if (hit) return (cachedVoice = hit)
     localStorage.removeItem(VOICE_PREF_KEY)
   }
 
-  cachedVoice = candidateVoices()[0] ?? all.find((v) => /^en/i.test(v.lang)) ?? null
+  cachedVoice = candidateVoices()[0] ?? all.find(speaksIt) ?? null
   return cachedVoice
 }
 
@@ -477,7 +517,7 @@ export function createSpeaker(): Speaker {
       const u = new SpeechSynthesisUtterance(text)
       const voice = pickVoice()
       if (voice) u.voice = voice
-      u.lang = voice?.lang ?? 'en-GB'
+      u.lang = voice?.lang ?? LANG
       // Deliberate, and deliberately invariant — the character's pace does not
       // change with stakes, and that steadiness is most of the effect. This
       // lands around 130 wpm, below the median for film dialogue.

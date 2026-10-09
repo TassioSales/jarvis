@@ -44,6 +44,47 @@ function vendorWasm() {
   }
 }
 
+/**
+ * Let the bridge see `.env.local` too.
+ *
+ * Vite reads that file for the face; the bridge only ever read its shell
+ * environment. A setting both halves need — the language, above all — then had
+ * to be made twice, in two places, and setting it once gave a face listening in
+ * Portuguese to a brain answering in English. Variables already set in the
+ * shell still win.
+ */
+if (existsSync('.env.local') && typeof process.loadEnvFile === 'function') {
+  try {
+    process.loadEnvFile('.env.local')
+  } catch (err) {
+    console.warn(`  could not read .env.local: ${err.message}`)
+  }
+}
+
+/**
+ * The face-recognition weights, for the same two reasons as the WASM above:
+ * the CSP only lets the page load them from its own origin, and copying them
+ * out of node_modules pins them to the version in the lockfile. Only the three
+ * networks the identity lock uses — the package ships seven.
+ */
+function vendorFaceModels() {
+  const from = 'node_modules/@vladmandic/face-api/model'
+  const to = 'public/faceapi'
+  if (!existsSync(from)) return // the lock is optional; carry on without it
+  if (existsSync(`${to}/face_recognition_model.bin`)) return
+  try {
+    mkdirSync(to, { recursive: true })
+    for (const net of ['tiny_face_detector', 'face_landmark_68', 'face_recognition']) {
+      for (const file of [`${net}_model-weights_manifest.json`, `${net}_model.bin`]) {
+        cpSync(`${from}/${file}`, `${to}/${file}`)
+      }
+    }
+    console.log('  vendored the face-recognition models into public/faceapi.')
+  } catch (err) {
+    console.warn(`  could not vendor the face-recognition models: ${err.message}`)
+  }
+}
+
 const writes = process.argv.includes('--writes')
 
 // A dim label per process, so the interleaved logs stay readable.
@@ -112,6 +153,7 @@ if (port) {
 }
 
 vendorWasm()
+vendorFaceModels()
 
 console.log('\nJ.A.R.V.I.S. starting — the brain and the face.\n')
 run('bridge', 'node', ['bridge/server.mjs'], '36', bridgeEnv)

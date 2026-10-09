@@ -1,3 +1,5 @@
+import { LANG_BASE } from '../config'
+
 /**
  * Filler speech.
  *
@@ -55,13 +57,68 @@ const ATTENTION = [
 function makePicker(pool: string[]) {
   let last = -1
   return () => {
-    if (pool.length < 2) return pool[0] ?? ''
+    if (pool.length < 2) return say(pool[0] ?? '')
     let i = last
     while (i === last) i = Math.floor(Math.random() * pool.length)
     last = i
-    return pool[i]
+    return say(pool[i])
   }
 }
+
+/**
+ * The same lines in Portuguese, keyed by the English they replace.
+ *
+ * A lookup rather than a second set of pools because the tool rules below are
+ * where the work is — which server, which verb, in what order — and none of
+ * that changes with the language. Same register: subjectless, no eagerness,
+ * "senhor" final and only sometimes. A line with no entry is spoken as written,
+ * which is audible and therefore gets fixed.
+ */
+const PT: Record<string, string> = {
+  'Working on it, sir.': 'Trabalhando nisso, senhor.',
+  'Compiling.': 'Compilando.',
+  'Retrieving.': 'Recuperando.',
+  'Accessing the archive.': 'Acessando o arquivo.',
+  'Cross-referencing.': 'Cruzando as referências.',
+  'Running the query now.': 'Executando a consulta.',
+  'Searching.': 'Pesquisando.',
+  'Under way.': 'Em andamento.',
+  'As you wish, sir.': 'Como quiser, senhor.',
+  'Very good, sir.': 'Muito bem, senhor.',
+  'Certainly.': 'Certamente.',
+  'Understood.': 'Entendido.',
+  'Consider it done.': 'Considere feito.',
+  'Directly, sir.': 'Agora mesmo, senhor.',
+  'Yes, sir?': 'Sim, senhor?',
+  'Sir?': 'Senhor?',
+  'At your service, sir.': 'Às suas ordens, senhor.',
+  'Standing by.': 'Em prontidão.',
+  'Awake, sir.': 'Desperto, senhor.',
+  'Assembling the footage.': 'Montando as imagens.',
+  'Rendering the sequence.': 'Renderizando a sequência.',
+  'Rendering.': 'Renderizando.',
+  'Composing it now.': 'Compondo agora.',
+  'Opening the browser.': 'Abrindo o navegador.',
+  'Navigating.': 'Navegando.',
+  'Reaching the device.': 'Alcançando o dispositivo.',
+  'Connecting to your phone.': 'Conectando ao seu telefone.',
+  'Checking your mail.': 'Verificando seu correio.',
+  'Reading the inbox.': 'Lendo a caixa de entrada.',
+  'Checking your calendar.': 'Verificando sua agenda.',
+  'Consulting the diary.': 'Consultando a agenda.',
+  'Synthesising.': 'Sintetizando.',
+  'Queuing it up.': 'Colocando na fila.',
+  'Putting it on.': 'Colocando para tocar.',
+  'Adjusting it now.': 'Ajustando agora.',
+  'Seeing to it, sir.': 'Cuidando disso, senhor.',
+  'Checking the repository.': 'Verificando o repositório.',
+  'Consulting the tracker.': 'Consultando o rastreador.',
+  'Running the query.': 'Executando a consulta.',
+  'Pulling the figures.': 'Levantando os números.',
+  'Consulting the record.': 'Consultando os registros.',
+}
+
+const say = (line: string) => (LANG_BASE === 'pt' ? (PT[line] ?? line) : line)
 
 export const working = makePicker(WORKING)
 export const acknowledge = makePicker(ACKNOWLEDGE)

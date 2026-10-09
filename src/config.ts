@@ -128,6 +128,27 @@ export const KOKORO_VOICE = choice(
   'bm_george',
 )
 
+/**
+ * The language JARVIS hears and speaks, as a BCP 47 tag: `en-GB`, `pt-BR`.
+ *
+ * One setting because the three places that need it have to agree: the
+ * recogniser transcribes in it, the voice picker chooses from voices that speak
+ * it, and the bridge tells the model to answer in it. Set two of the three and
+ * he hears Portuguese as mangled English, or reads English aloud with a
+ * Portuguese voice. The bridge reads this same variable from `.env.local`.
+ */
+export const LANG = str(import.meta.env.VITE_JARVIS_LANG) ?? 'en-GB'
+
+/**
+ * Write everything the voice loop hears and decides to ~/.jarvis/voice.log.
+ * For working out why he did not respond; see voiceLog in voice.ts. Off by
+ * default — it is a transcript of the room.
+ */
+export const VOICE_LOG = flag('VITE_JARVIS_VOICE_LOG', import.meta.env.VITE_JARVIS_VOICE_LOG, false)
+
+/** The language without its region — `pt` for `pt-BR`. */
+export const LANG_BASE = LANG.split(/[-_]/)[0].toLowerCase()
+
 export const env = {
   anthropicKey: str(import.meta.env.VITE_ANTHROPIC_API_KEY) ?? '',
   elevenKey: str(import.meta.env.VITE_ELEVENLABS_API_KEY) ?? '',

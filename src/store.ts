@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import type { BriefCard } from './lib/briefing'
 
 export type Phase =
   | 'offline'   // waiting for the click that unlocks audio
@@ -230,6 +231,13 @@ type State = {
   looking: string | null
   /** Transient status line during boot, e.g. the voice model download. */
   bootNote: string
+  /** The briefing being read out: its cards so far, which one is up, and the
+   *  sentence being spoken. Null whenever there is no briefing on screen. */
+  briefing: { cards: BriefCard[]; active: number; caption: string } | null
+  /** Whether he is waiting on a face before answering to anyone. */
+  locked: boolean
+  /** Where the identity check currently stands; drives the lock's animation. */
+  identity: 'idle' | 'scanning' | 'granted' | 'denied'
   /** Cards currently on the display, newest last. */
   panels: Panel[]
   /** Blades currently open, newest last — which is also front-most. */
@@ -245,6 +253,9 @@ type State = {
   setGestures: (on: boolean) => void
   setLooking: (why: string | null) => void
   setBootNote: (n: string) => void
+  setLocked: (locked: boolean) => void
+  setBriefing: (briefing: State['briefing']) => void
+  setIdentity: (identity: State['identity']) => void
   pushPanel: (p: Panel) => void
   clearPanels: () => void
   pushBlade: (b: Blade) => void
@@ -286,12 +297,18 @@ export const useStore = create<State>((set) => ({
   focusedBlade: null,
   expandedBlade: null,
   bootNote: '',
+  locked: false,
+  identity: 'idle',
+  briefing: null,
   ui: defaultUi(),
 
   setVoice: (voice) => set({ voice }),
   setGestures: (gestures) => set({ gestures }),
   setLooking: (looking) => set({ looking }),
   setBootNote: (bootNote) => set({ bootNote }),
+  setLocked: (locked) => set({ locked }),
+  setBriefing: (briefing) => set({ briefing }),
+  setIdentity: (identity) => set({ identity }),
   // Three is as many as fits around the reactor without crowding it. Sticky
   // panels are exempt from the cull — the tool description promises they stay
   // until replaced, and a plain slice(-3) silently evicted them the moment a

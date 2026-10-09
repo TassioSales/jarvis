@@ -21,12 +21,30 @@ import { displayServer } from './panels.mjs'
 import { uiServer } from './ui.mjs'
 import { chromeAvailable, chromeServer } from './chrome.mjs'
 import { visionServer } from './vision.mjs'
-import { homedir, tmpdir } from 'node:os'
-import { readFileSync, realpathSync } from 'node:fs'
+import { memoryFacts, memoryNote, memoryServer } from './memory.mjs'
+import { briefing, markets, news, weather } from './feeds.mjs'
+import { cpus, freemem, homedir, hostname, tmpdir, totalmem, uptime } from 'node:os'
+import { appendFileSync, mkdirSync, readFileSync, realpathSync, statSync, renameSync } from 'node:fs'
 import { readFile, realpath, stat } from 'node:fs/promises'
 import { isAbsolute, join, relative, resolve as resolvePath } from 'node:path'
 import { openRemote, proxyError, vetTarget, PROXY_UA } from './net.mjs'
 import { probeUrl, renderPage } from './page.mjs'
+
+/**
+ * Read `.env.local` here as well as in the launcher.
+ *
+ * `npm start` already loads it, but `npm run bridge` — the two-terminal recipe
+ * in the README — starts this file directly, and then the face is configured
+ * for one language and the brain for another. Variables already in the shell
+ * still win, so running it twice is harmless.
+ */
+if (typeof process.loadEnvFile === 'function') {
+  try {
+    process.loadEnvFile(new URL('../.env.local', import.meta.url))
+  } catch {
+    // No file, which is the default and perfectly fine.
+  }
+}
 
 const PORT = Number(process.env.JARVIS_BRIDGE_PORT ?? 8787)
 
@@ -279,6 +297,12 @@ function decideTool(name) {
     // indicator the user can see for as long as it is live.
     if (server === 'jarvis_eyes') return true
 
+    // His own notes about the user. It writes, but only ever one line to one
+    // fixed file the user can open — see memory.mjs for why that is allowed
+    // through with writes off. Named here because `remember` begins with no
+    // read verb and would otherwise wait on ALLOW_WRITES.
+    if (server === 'jarvis_memory') return true
+
     const tool = mcpToolOf(name)
     if (EFFECTFUL_VERB.test(tool) && !VETO_EXEMPT.has(`${server}__${tool}`)) {
       return ALLOW_WRITES
@@ -436,7 +460,75 @@ Using tools:
   is read out loud, and a URL becomes "aitch tee tee pee colon slash slash".
   Put the source in the panel as a short tag like "REUTERS" instead.
 - If a tool fails or isn't connected, one plain sentence saying so.
-- If you don't know, say you don't know.`
+- If you don't know, say you don't know.
+
+The morning briefing:
+- "Good morning" — in any language — is a request for the day, not a greeting
+  to return. Answer with the briefing.
+- Gather it in silence first: the weather for their city today (temperature now,
+  the range, the chance of rain), anything on their calendar today and tomorrow
+  if a calendar tool is connected, and the three headlines most worth knowing.
+- If you do not know their city, ask once, then \`remember\` it.
+- Put it all on one \`display\` panel, then say it. It is data they asked for,
+  so length is licensed: up to six short sentences, weather first, calendar
+  second, headlines last, and close by offering the one useful next step.
+- Leave out any part you could not get rather than announcing the gap.
+
+Your memory:
+- \`remember\` keeps a fact about them for future sessions; \`forget\` drops
+  one. What you already know is listed at the end of this prompt when there is
+  anything.
+- Remember what will still be true next week — where they live, what they call
+  things, how they like something done. Not the task in hand.`
+
+/**
+ * The language he speaks, when it is not English.
+ *
+ * The persona above is written in English because its rules are about English
+ * — where "sir" sits, which softener fronts bad news. Rather than translate
+ * the whole prompt and maintain two, this restates the handful of rules that
+ * are language-bound and leaves the rest to carry over. The browser reads the
+ * same variable, so what he hears, says and thinks stay in one language.
+ */
+const LANG = process.env.JARVIS_LANG ?? process.env.VITE_JARVIS_LANG ?? 'en-GB'
+
+const LANGUAGE_NOTES = {
+  pt: `
+
+LANGUAGE. You speak Brazilian Portuguese, always, whatever language the tools
+answer in — translate what you report. Every rule above still holds, restated:
+- "Sir" is "senhor", with the same three positions carrying the same meanings.
+  Never "você" where "o senhor" fits; never their name.
+- "I'm afraid" is "Receio que"; "Unfortunately" is "Infelizmente". Still no
+  apology: never "desculpe", never "sinto muito".
+- "Very good, sir" is "Muito bem, senhor". "Shall I" is "Devo" or "Quer que eu".
+- "Yes." is "Sim." — never "tá", "beleza", "claro!", "com certeza!", "ótimo".
+- Formal register without stiffness: a butler, not a call centre. No
+  diminutives, no gerund padding ("vou estar verificando").
+- Numbers, dates and times as spoken in Portuguese: "oito e quinze", "primeiro
+  de agosto", "vinte graus".
+- Text you put on a panel or a blade is in Portuguese too.`,
+}
+
+/**
+ * A logged-out Claude Code does not fail the turn — it "succeeds" with the
+ * CLI's own error as the answer, and that sentence is then read aloud as if
+ * JARVIS had said it: English, mid-sentence OAuth jargon, and no hint of what
+ * to do. It is the first thing a new install hears, so it gets a line of its
+ * own, in his voice and language, that names the fix.
+ */
+const NOT_LOGGED_IN =
+  /^(failed to authenticate|invalid api key|not logged in|please run \/login)|oauth (session|token) (has )?expired/i
+
+const LOGIN_LINE = /^pt/i.test(LANG)
+  ? 'Receio que o Claude Code não esteja autenticado, senhor. Abra um terminal, execute claude e faça o login.'
+  : "I'm afraid Claude Code is not signed in, sir. Open a terminal, run claude, and log in."
+
+const LANGUAGE_NOTE =
+  LANGUAGE_NOTES[LANG.split(/[-_]/)[0].toLowerCase()] ??
+  (/^en/i.test(LANG) ? '' : `
+
+LANGUAGE. Always speak and write in ${LANG}.`)
 
 /**
  * ElevenLabs credentials, borrowed from the MCP server config.
@@ -649,6 +741,27 @@ async function proxyRemote(req, res, cors, { kinds, maxBytes, timeoutMs, ranged 
  * but a request with no Origin at all is served, because an <img src> load
  * (which is how panels fetch screenshots) never sends one.
  */
+/**
+ * Processor load since the last time anyone asked, as a percentage.
+ *
+ * os.loadavg() is all zeroes on Windows, so this does it the long way: the
+ * kernel's own tick counters, compared with the previous reading. The first
+ * call has nothing to compare with and reports zero.
+ */
+let lastTicks = null
+function cpuLoad() {
+  let idle = 0
+  let total = 0
+  for (const cpu of cpus()) {
+    for (const ticks of Object.values(cpu.times)) total += ticks
+    idle += cpu.times.idle
+  }
+  const before = lastTicks
+  lastTicks = { idle, total }
+  if (!before || total === before.total) return 0
+  return 100 * (1 - (idle - before.idle) / (total - before.total))
+}
+
 function corsFor(req) {
   const origin = req.headers.origin
   const headers = { vary: 'origin' }
@@ -685,6 +798,73 @@ const handleRequest = async (req, res) => {
     const eleven = Boolean(elevenKey())
     res.writeHead(200, { ...cors, 'content-type': 'application/json' })
     return res.end(JSON.stringify({ ok: true, tts: eleven, stt: eleven }))
+  }
+
+  // What the telemetry monitor shows: the machine's vitals, how the brain is
+  // configured, and what he has been told to remember. Read-only, and behind
+  // the same origin check as everything else here — the facts are personal.
+  if (req.method === 'GET' && req.url === '/telemetry') {
+    res.writeHead(200, { ...cors, 'content-type': 'application/json', 'cache-control': 'no-store' })
+    return res.end(
+      JSON.stringify({
+        cpu: cpuLoad(),
+        memUsed: totalmem() - freemem(),
+        memTotal: totalmem(),
+        uptime: uptime(),
+        host: hostname(),
+        model: MODEL,
+        effort: EFFORT,
+        voice: elevenKey() ? 'ElevenLabs' : 'browser',
+        facts: memoryFacts(),
+      }),
+    )
+  }
+
+  // The voice loop's own account of what it heard, appended to a file so a
+  // "he doesn't hear me" report can be read instead of guessed at. The page
+  // only sends these when VITE_JARVIS_VOICE_LOG=1.
+  if (req.method === 'POST' && req.url === '/voicelog') {
+    const chunks = []
+    let size = 0
+    for await (const chunk of req) {
+      size += chunk.length
+      if (size > 256_000) break
+      chunks.push(chunk)
+    }
+    try {
+      const events = JSON.parse(Buffer.concat(chunks).toString('utf8'))
+      const dir = join(homedir(), '.jarvis')
+      const file = join(dir, 'voice.log')
+      mkdirSync(dir, { recursive: true })
+      // One generation of history. A log nobody rotates is a disk nobody owns.
+      try {
+        if (statSync(file).size > 2_000_000) renameSync(file, `${file}.1`)
+      } catch {
+        // no file yet
+      }
+      if (Array.isArray(events)) {
+        appendFileSync(file, events.map((e) => JSON.stringify(e)).join('\n') + '\n')
+      }
+    } catch {
+      // A malformed batch is dropped; diagnostics must never break the thing
+      // they are diagnosing.
+    }
+    res.writeHead(204, cors)
+    return res.end()
+  }
+
+  // The forecast and the headlines for the side monitors. Cached in feeds.mjs,
+  // so three windows polling cost the upstream services one request between them.
+  const FEEDS = { '/weather': weather, '/news': news, '/markets': markets, '/briefing': briefing }
+  if (req.method === 'GET' && FEEDS[req.url]) {
+    try {
+      const data = await FEEDS[req.url]()
+      res.writeHead(200, { ...cors, 'content-type': 'application/json', 'cache-control': 'no-store' })
+      return res.end(JSON.stringify(data))
+    } catch (err) {
+      res.writeHead(502, cors)
+      return res.end(String(err?.message ?? err))
+    }
   }
 
   // Serve local image files to the page. Screenshots and generated art land on
@@ -856,6 +1036,11 @@ const handleRequest = async (req, res) => {
             // Flash is the low-latency model — a conversation needs speed more
             // than it needs the last few percent of quality.
             model_id: 'eleven_flash_v2_5',
+            // Left to guess, the model reads a two-word line like "Senhor?"
+            // in whatever language it resembles most, in an English accent.
+            // Naming the language makes a British voice pronounce Portuguese
+            // as Portuguese. English is left to detection, as it always was.
+            ...(/^en/i.test(LANG) ? {} : { language_code: LANG.split(/[-_]/)[0] }),
             voice_settings: {
               stability: 0.4,
               similarity_boost: 0.75,
@@ -937,6 +1122,13 @@ const handleRequest = async (req, res) => {
             : 'webm'
       const form = new FormData()
       form.append('model_id', 'scribe_v1')
+      // No "[noise]" or "(music)" tags: only words are wanted here, and a tag
+      // is indistinguishable from a word once it is in the transcript.
+      form.append('tag_audio_events', 'false')
+      // Scribe detects the language by itself, and on a three-word command it
+      // guesses — a short Portuguese order comes back as Spanish. Naming it
+      // settles that. English is left to detection, as it always was.
+      if (!/^en/i.test(LANG)) form.append('language_code', LANG.split(/[-_]/)[0])
       form.append(
         'file',
         new Blob([Buffer.concat(chunks)], { type }),
@@ -1004,7 +1196,7 @@ console.log(`[jarvis] bridge listening on ws://localhost:${PORT}`)
 console.log(
   `[jarvis] speech ${elevenKey() ? 'via ElevenLabs (key from MCP config)' : 'using browser fallback voice'}`,
 )
-console.log(`[jarvis] model ${MODEL} · effort ${EFFORT}`)
+console.log(`[jarvis] model ${MODEL} · effort ${EFFORT} · language ${LANG}`)
 console.log(
   `[jarvis] writes ${ALLOW_WRITES ? 'ENABLED' : 'disabled'}` +
     (ALLOW_WRITES ? '' : ' — set JARVIS_ALLOW_WRITES=1 to permit shell/file/device actions'),
@@ -1084,7 +1276,29 @@ wss.on('connection', (socket) => {
    * listener over there has already heard.
    */
   let answering = null
-  const sendTurn = (msg) => send({ ...msg, ask: answering })
+  const sendTurn = (msg) => {
+    // The warm-up turn is nobody's question; none of it goes to the browser.
+    if (priming) return
+    send({ ...msg, ask: answering })
+  }
+
+  /**
+   * Warming the session before anyone speaks to it.
+   *
+   * The first turn of a session is the slow one: the CLI makes its first
+   * request, the MCP servers finish connecting and the prompt cache is written.
+   * Measured here, that is about three and a half seconds to the first word
+   * against about one and a half for every turn after it — and the first turn
+   * is the one a new user judges him by.
+   *
+   * So the session asks itself one throwaway question the moment the socket
+   * opens, which in practice is during the boot animation. Its output is
+   * discarded, and a real question that arrives while it is still running
+   * waits for it rather than racing it, exactly as it would behind an
+   * interrupt. Set JARVIS_PRIME=0 to go back to a cold first turn.
+   */
+  let priming = process.env.JARVIS_PRIME !== '0'
+  const PRIME_TEXT = 'Systems check before the user arrives. Reply with the single word: ready.'
 
   /**
    * Asking the browser for something and waiting for the answer.
@@ -1160,6 +1374,18 @@ wss.on('connection', (socket) => {
       finishTurn = resolve
     })
 
+  if (priming) {
+    inbox.push(PRIME_TEXT)
+    // Questions queue behind the warm-up. The timeout is the same guard the
+    // interrupt path has: a warm-up that never reports must not wedge him.
+    settling = Promise.race([
+      turnFinished(),
+      new Promise((resolve) => setTimeout(resolve, 20_000)),
+    ]).then(() => {
+      priming = false
+    })
+  }
+
   /**
    * A brief pause so the abandoned turn's frames are tagged with the OLD id
    * before the new one is adopted. Short, because correctness now comes from
@@ -1179,6 +1405,8 @@ wss.on('connection', (socket) => {
     // interface is the interface talking about itself, not work being done for
     // the user, and the badge would be describing the very thing they can see.
     if (name.startsWith('mcp__jarvis_ui__')) return
+    // Noting a fact is not work the user is waiting on either.
+    if (name.startsWith('mcp__jarvis_memory__')) return
     if (decideTool(name)) return sendTurn({ type: 'tool', name })
     if (id) heldTools.set(id, name)
   }
@@ -1214,12 +1442,16 @@ wss.on('connection', (socket) => {
         jarvis_chrome: chromeServer({ allowWrites: ALLOW_WRITES }),
         // The camera, which unlike everything else here has to ask and wait.
         jarvis_eyes: visionServer(ask),
+        // What he was told in earlier sessions, and the means to add to it.
+        jarvis_memory: memoryServer(),
       },
       // A plain system prompt, not the claude_code preset. The preset is
       // tuned for a coding agent — verbose, file-oriented, and a large chunk
       // of input tokens on every turn. Replacing it makes the persona stick,
       // keeps answers short enough to speak, and cuts cost per turn.
-      systemPrompt: SYSTEM_PROMPT,
+      // Read per session, so a fact learned in one conversation is known in the
+      // next without restarting the bridge.
+      systemPrompt: SYSTEM_PROMPT + LANGUAGE_NOTE + memoryNote(),
       // Run from the home directory so project-scoped MCP servers don't shadow
       // the global ones, and so file tools have a sane root.
       cwd: homedir(),
@@ -1342,10 +1574,17 @@ wss.on('connection', (socket) => {
             // empty text is indistinguishable from a turn that simply had
             // nothing to say — the HUD stops spinning and JARVIS stands there
             // silent. Say what happened instead.
-            if (msg.subtype === 'success') {
+            if (priming) {
+              // The warm-up is over, however it ended. Cleared here as well as
+              // on the queue above, because an interrupt replaces that queue.
+              priming = false
+              console.log('[jarvis] session warm')
+            } else if (msg.subtype === 'success') {
               sendTurn({
                 type: 'done',
-                text: msg.result ?? '',
+                text: NOT_LOGGED_IN.test(msg.result ?? '')
+                  ? LOGIN_LINE
+                  : (msg.result ?? ''),
                 costUsd: msg.total_cost_usd ?? null,
               })
             } else {

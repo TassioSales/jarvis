@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useStore } from '../store'
+import { t } from '../lib/i18n'
 
 /**
  * Rotating example commands, shown only while idle.
@@ -42,7 +43,7 @@ export function Suggestions() {
 
   return (
     <div className="suggest">
-      <span className="suggest-lead">try</span>
+      <span className="suggest-lead">{t('try')}</span>
       <AnimatePresence mode="wait">
         <motion.span
           key={i}
@@ -52,7 +53,7 @@ export function Suggestions() {
           exit={{ opacity: 0, y: -6 }}
           transition={{ duration: 0.35 }}
         >
-          “hey jarvis, {EXAMPLES[i]}”
+          “jarvis, {t(EXAMPLES[i])}”
         </motion.span>
       </AnimatePresence>
     </div>

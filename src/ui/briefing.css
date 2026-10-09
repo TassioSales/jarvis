@@ -1,0 +1,279 @@
+/* The briefing: one card over the reactor, the rest on a shelf, a caption below. */
+
+.brief {
+  --ink: #e6fbff;
+  --ink-2: rgb(214 244 250 / 0.7);
+  --ink-3: rgb(214 244 250 / 0.45);
+
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto auto;
+  justify-items: center;
+  gap: clamp(12px, 2vmin, 24px);
+  padding: 13vh 6vw 7vh;
+  pointer-events: none;
+}
+
+.brief-card {
+  border: 1px solid color-mix(in srgb, var(--interface) 55%, transparent);
+  background: color-mix(in srgb, var(--interface) 9%, rgb(2 10 18 / 0.86));
+  backdrop-filter: blur(10px);
+  box-shadow:
+    0 0 40px color-mix(in srgb, var(--interface) 22%, transparent),
+    inset 0 0 24px color-mix(in srgb, var(--interface) 8%, transparent);
+  color: var(--ink);
+}
+
+.brief-main {
+  align-self: center;
+  width: min(680px, 62vw);
+  padding: clamp(18px, 2.8vmin, 34px);
+  animation: brief-in 0.5s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.brief-kicker {
+  margin-bottom: clamp(8px, 1.4vmin, 16px);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: clamp(10px, 1.3vmin, 14px);
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: var(--interface);
+}
+
+.brief-title {
+  font-size: clamp(20px, 3.6vmin, 42px);
+  font-weight: 300;
+  line-height: 1.15;
+}
+.brief-title::first-letter {
+  text-transform: uppercase;
+}
+
+.brief-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: clamp(12px, 2vmin, 22px);
+}
+.brief-chips span {
+  padding: 5px 12px;
+  border: 1px solid color-mix(in srgb, var(--interface) 40%, transparent);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: clamp(9px, 1.15vmin, 12px);
+  letter-spacing: 0.2em;
+  color: var(--ink-2);
+}
+
+.brief-row {
+  display: flex;
+  align-items: center;
+  gap: clamp(16px, 3vmin, 40px);
+}
+.brief-hero {
+  font-size: clamp(48px, 10vmin, 116px);
+  font-weight: 300;
+  line-height: 0.95;
+  font-variant-numeric: tabular-nums;
+}
+.brief-side {
+  display: grid;
+  gap: 6px;
+  font-size: clamp(13px, 2vmin, 22px);
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+.brief-side span:first-child {
+  color: var(--ink);
+}
+
+.brief-quotes {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: clamp(10px, 2vmin, 28px);
+}
+.brief-quotes div {
+  display: grid;
+  gap: 4px;
+  padding-left: 12px;
+  border-left: 1px solid color-mix(in srgb, var(--interface) 35%, transparent);
+}
+.brief-quotes span {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: clamp(10px, 1.25vmin, 13px);
+  letter-spacing: 0.2em;
+  color: var(--ink-3);
+}
+.brief-quotes b {
+  font-size: clamp(17px, 2.9vmin, 34px);
+  font-weight: 300;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.brief-quotes i {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: clamp(10px, 1.3vmin, 14px);
+  font-style: normal;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.brief-picture {
+  display: block;
+  width: 100%;
+  max-height: 34vh;
+  margin-bottom: clamp(10px, 1.6vmin, 18px);
+  object-fit: cover;
+  filter: saturate(0.85);
+}
+.brief-headline {
+  font-size: clamp(16px, 2.5vmin, 28px);
+  line-height: 1.28;
+}
+.brief-source {
+  margin-top: 10px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: clamp(10px, 1.25vmin, 13px);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.brief-list {
+  display: grid;
+  gap: clamp(8px, 1.4vmin, 16px);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: clamp(14px, 2.1vmin, 23px);
+  line-height: 1.3;
+}
+.brief-list li {
+  padding-left: 12px;
+  border-left: 2px solid color-mix(in srgb, var(--interface) 55%, transparent);
+}
+.brief-list span {
+  display: block;
+  margin-bottom: 2px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.56em;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+/* ---- the shelf: the same cards, small, in the order they were spoken */
+
+.brief-shelf {
+  display: flex;
+  justify-content: center;
+  gap: clamp(8px, 1.2vmin, 14px);
+  max-width: 100%;
+}
+.brief-mini {
+  flex: 0 1 clamp(130px, 13vw, 220px);
+  min-width: 0;
+  max-height: 17vh;
+  overflow: hidden;
+  padding: clamp(8px, 1.1vmin, 13px);
+  opacity: 0.86;
+  animation: brief-shelve 0.45s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.brief-mini .brief-kicker {
+  margin-bottom: 6px;
+  overflow: hidden;
+  font-size: clamp(7px, 0.85vmin, 10px);
+  letter-spacing: 0.18em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.brief-mini .brief-title {
+  font-size: clamp(11px, 1.4vmin, 15px);
+}
+.brief-mini .brief-hero {
+  font-size: clamp(22px, 3.4vmin, 38px);
+}
+.brief-mini .brief-row {
+  gap: 10px;
+}
+.brief-mini .brief-side {
+  gap: 2px;
+  font-size: clamp(9px, 1.05vmin, 12px);
+}
+.brief-mini .brief-quotes {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 3px;
+}
+.brief-mini .brief-quotes div {
+  display: flex;
+  justify-content: space-between;
+  padding-left: 0;
+  border-left: 0;
+}
+.brief-mini .brief-quotes span,
+.brief-mini .brief-quotes b {
+  font-size: clamp(9px, 1.05vmin, 12px);
+}
+.brief-mini .brief-list {
+  gap: 4px;
+  font-size: clamp(9px, 1.05vmin, 12px);
+}
+.brief-mini .brief-list li {
+  overflow: hidden;
+  padding-left: 6px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.brief-mini .brief-list span {
+  display: none;
+}
+.brief-mini .brief-picture {
+  max-height: 7vh;
+  margin-bottom: 6px;
+}
+.brief-mini .brief-headline {
+  display: -webkit-box;
+  overflow: hidden;
+  font-size: clamp(9px, 1.05vmin, 12px);
+  line-height: 1.3;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+/* ---- the caption */
+
+.brief-caption {
+  max-width: min(900px, 80vw);
+  margin: 0;
+  font-size: clamp(15px, 2.3vmin, 26px);
+  font-weight: 600;
+  line-height: 1.35;
+  text-align: center;
+  text-wrap: balance;
+  color: var(--ink);
+  text-shadow:
+    0 0 14px rgb(0 0 0 / 0.9),
+    0 2px 4px rgb(0 0 0 / 0.9);
+}
+
+@keyframes brief-in {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.94);
+    filter: blur(8px);
+  }
+}
+@keyframes brief-shelve {
+  from {
+    opacity: 0;
+    transform: translateY(-40px) scale(1.5);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .brief-main,
+  .brief-mini {
+    animation: none;
+  }
+}

@@ -1,4 +1,4 @@
-import { BRIDGE_HTTP_URL } from '../config'
+import { BRIDGE_HTTP_URL, LANG, VOICE_LOG } from '../config'
 import { getMic } from './audio'
 import { speakingNow, speakingSince } from './tts'
 import { startVad, type Vad } from './vad'
@@ -76,9 +76,24 @@ const WAKE_DEBOUNCE = 1500
  * Jervis, Jarvys or Java's for a perfectly clear utterance — every one of which
  * used to be silently discarded, so the wake word "just didn't work" with no
  * indication why. Better a rare false wake than a name that does not answer.
+ *
+ * The Portuguese recogniser has its own set: Jarbas, Jarves, Járvis and
+ * Charvis are what it makes of the same name, and "ei", "oi" and "olá" are how
+ * he is hailed. They sit in the one pattern because none of them is a word an
+ * English speaker says to him by accident.
+ *
+ * So the name is matched by shape rather than by list: a J-sound, a vowel, an
+ * optional R, a V or a B, a vowel, and whatever sibilant the recogniser chose
+ * to end it with. Without the R the sibilant is required, which is what keeps
+ * "java" an ordinary word. That takes in Jarvis, Jarves, Jarvez, Jarviz, Jarbis, Javis,
+ * Jervis, Jairvis, Djarvis and Jarbas without anyone having to have heard each
+ * one first. The handful that do not fit the shape are listed after it.
  */
-const WAKE =
-  /\b(?:hey|hi|ok|okay|yo)?\s*(?:jarvis|jarvys|jervis|jarvis's|travis|jarviss|java's|jarv)\b(?!'s)/i
+export const NAME_PATTERN =
+  "(?:d?j[aáeé]i?(?:r[vb][iíeay][szx]?s?|[vb][iíeay][szx]s?)|ch[aá]r[vb]is|travis|java's|jarv)"
+export const HAIL_PATTERN = '(?:hey|hi|ok|okay|yo|ei|oi|olá|ola|ô|o)'
+
+const WAKE = new RegExp(`\\b${HAIL_PATTERN}?\\s*${NAME_PATTERN}\\b(?!'s)`, 'i')
 
 /** Everything after the wake phrase, which is usually the actual command. */
 function afterWake(text: string): string {
@@ -152,7 +167,7 @@ const SELF_GUARD_MS = 350
  * more clause. Making it generous here is what would make every ordinary
  * question feel slow.
  */
-const SETTLE_MS = 250
+const SETTLE_MS = 180
 /** ...and this long when the sentence is plainly unfinished. */
 const CONTINUE_MS = 1600
 /**
@@ -257,6 +272,12 @@ function makeAssembler(h: {
 const norm = (s: string) =>
   s
     .toLowerCase()
+    // Fold accents off before dropping what is not a letter. Without this
+    // "são" became "s o" and "não" became "n o": every accented word turned
+    // into two fragments that matched nothing, and the filter below was
+    // comparing confetti.
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
     .replace(/[^a-z0-9' ]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
@@ -266,8 +287,12 @@ const norm = (s: string) =>
  * he happens to be saying. Suppressing "stop" because he just said "stop"
  * would be the single most infuriating failure this file could have.
  */
-const OVERRIDE =
-  /\b(stop|wait|jarvis|cancel|enough|quiet|hold on|shut up|never ?mind|forget it|no)\b/i
+const OVERRIDE = new RegExp(
+  '\\b(stop|wait|jarvis|cancel|enough|quiet|hold on|shut up|never ?mind|forget it|no' +
+    '|pare|para|parar|espera|espere|cancela|cancelar|chega|quieto|esquece|deixa)\\b' +
+    `|\\b${NAME_PATTERN}\\b`,
+  'i',
+)
 
 /**
  * Words too common to be evidence of anything.
@@ -284,7 +309,16 @@ const STOP = new Set(
     'our their what which who how why when where do does did can could would ' +
     'should will shall not no yes if then than as about into over under out up ' +
     'down one two three first second third now here there just very really got ' +
-    'get have has had say said tell me okay ok well right').split(' '),
+    'get have has had say said tell me okay ok well right ' +
+    // The same class of word in Portuguese, accents already folded. Without
+    // these every "de", "que" and "o" counted as a distinctive word, and an
+    // ordinary follow-up that shared a few with his last answer was thrown
+    // away as his own echo — which from the chair is him ignoring you.
+    'o os as um uma uns umas e ou mas de do da dos das em no na nos nas por ' +
+    'para pra com sem que se como quando onde qual quais quem porque eu tu ' +
+    'voce ele ela nos eles elas meu minha seu sua isso isto esse essa este ' +
+    'esta aquilo la aqui ali ja nao sim tem ter foi ser sao esta estao era ' +
+    'vai vou pode ao aos muito mais menos tambem so entao agora hoje senhor').split(' '),
 )
 
 /**
@@ -315,6 +349,40 @@ function isEcho(heard: string, spoken: string): boolean {
   let hits = 0
   for (const w of content) if (mine.has(w)) hits++
   return hits / content.length >= 0.6
+}
+
+// ---------------------------------------------------------------------------
+// A record of what he heard
+// ---------------------------------------------------------------------------
+
+/**
+ * "He doesn't hear me" cannot be diagnosed from a description. It is one of
+ * four different faults — the detector never tripped, the segment came back
+ * empty, the words were heard and discarded, or they were heard and he was
+ * busy — and they have four different fixes. This writes each step to a file
+ * on the bridge's side (~/.jarvis/voice.log) so the answer can be read rather
+ * than guessed.
+ *
+ * Off unless VITE_JARVIS_VOICE_LOG=1, because it is a transcript of the room:
+ * everything he hears, including everything not said to him.
+ */
+const LOGGING = VOICE_LOG
+let logQueue: object[] = []
+let logTimer: ReturnType<typeof setTimeout> | null = null
+
+export function voiceLog(event: string, detail: object = {}): void {
+  if (!LOGGING) return
+  logQueue.push({ at: new Date().toISOString().slice(11, 23), event, ...detail })
+  logTimer ??= setTimeout(() => {
+    logTimer = null
+    const batch = logQueue
+    logQueue = []
+    void fetch(`${BRIDGE_HTTP_URL}/voicelog`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(batch),
+    }).catch(() => {})
+  }, 800)
 }
 
 // ---------------------------------------------------------------------------
@@ -366,6 +434,7 @@ export const diag = {
 /** Record why a transcript went nowhere. Silence always has a reason; this is
  *  the difference between debugging it and speculating about it. */
 function drop(why: string) {
+  voiceLog('dropped', { why })
   diag.dropped = why
 }
 
@@ -407,6 +476,17 @@ async function startElevenVoice(h: VoiceHandlers): Promise<Voice> {
   let lastWake = 0
   let vad: Vad | null = null
 
+  const round = (n: number) => Math.round(n * 1e4) / 1e4
+  const meterNow = () => {
+    const m = vad?.meter()
+    return m ? { energy: round(m.energy), floor: round(m.floor), threshold: round(m.threshold) } : {}
+  }
+  // The level of the room, every few seconds: the only way to tell "he is not
+  // listening" from "he is listening and the bar is set above your voice".
+  const meterLog = LOGGING
+    ? setInterval(() => voiceLog('room', { mode: h.mode(), ...meterNow() }), 4000)
+    : null
+
   /**
    * Segments waiting for the transcriber, oldest first.
    *
@@ -432,6 +512,7 @@ async function startElevenVoice(h: VoiceHandlers): Promise<Voice> {
       diag.dropped = ''
       diag.accepted++
       diag.holding = ''
+      voiceLog('turn', { text, mode: h.mode() })
       h.onUtterance(text)
     },
     partial: (text) => h.onPartial(text),
@@ -463,7 +544,10 @@ async function startElevenVoice(h: VoiceHandlers): Promise<Voice> {
         return
       }
       const { text } = (await res.json()) as { text?: string }
-      const said = (text ?? '').trim()
+      // The transcriber annotates what is not speech — "[ruído]", "(música)",
+      // "[risos]". Those are a description of the room, not something anyone
+      // said, and one of them reached the model as a question.
+      const said = (text ?? '').replace(/[[(][^\])]{0,40}[\])]/g, ' ').replace(/\s+/g, ' ').trim()
       diag.lastError = ''
 
       if (!said) {
@@ -480,6 +564,7 @@ async function startElevenVoice(h: VoiceHandlers): Promise<Voice> {
 
       diag.heard = said
       diag.heardAt = Date.now()
+      voiceLog('heard', { mode, text: said, sttMs: diag.idleMs })
 
       if (mode === 'wake') {
         if (WAKE.test(said) && Date.now() - lastWake > WAKE_DEBOUNCE) {
@@ -538,7 +623,8 @@ async function startElevenVoice(h: VoiceHandlers): Promise<Voice> {
         h.onSpeechStart()
       }
     },
-    onEnd: (blob) => {
+    onEnd: (blob, ms) => {
+      voiceLog('segment', { mode: h.mode(), ms: Math.round(ms), bytes: blob.size, ...meterNow() })
       pendingAudio.push(blob)
       void drain()
     },
@@ -577,6 +663,7 @@ async function startElevenVoice(h: VoiceHandlers): Promise<Voice> {
   return {
     stop: () => {
       clearInterval(guardPoll)
+      if (meterLog) clearInterval(meterLog)
       assemble.cancel()
       vad?.stop()
       diag.running = false
@@ -760,7 +847,7 @@ function startBrowserVoice(h: VoiceHandlers): Voice {
     rec = new Ctor()
     rec.continuous = true
     rec.interimResults = true
-    rec.lang = 'en-GB'
+    rec.lang = LANG
     rec.onstart = () => {
       running = true
       diag.running = true

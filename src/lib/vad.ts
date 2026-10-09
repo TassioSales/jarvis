@@ -54,7 +54,23 @@ export type Vad = {
 
 /** How far above the noise floor the signal must rise to count as speech.
  *  The floor tracks the room, so this is a ratio, not an absolute level. */
-const TRIGGER_OVER_FLOOR = 2.6
+const TRIGGER_OVER_FLOOR = 2.1
+/**
+ * The trigger is never set below this, however quiet the room.
+ *
+ * Measured on a real desk (see ~/.jarvis/voice.log): the room idled between
+ * 0.0017 and 0.004 while the floor estimate sat at 0.002, because the floor
+ * follows the quietest moments and the room is not a constant. A trigger of
+ * twice the floor therefore landed *inside* the room's own noise — and the
+ * release level, lower still, was below it. So a segment opened on nothing and
+ * could not close: saying his name once produced an eight-and-a-half second
+ * recording that was only transcribed when it finally ended. From the chair,
+ * that is him not listening.
+ *
+ * Speech at the same microphone measured about 0.05. This sits well clear of
+ * both: several times the room, a fifth of a voice.
+ */
+const TRIGGER_MIN = 0.011
 /** While he is speaking, demand this much more, so residual echo is ignored. */
 const GUARD_BOOST = 2.4
 /** Falling back below trigger×this ends the segment. Hysteresis stops a single
@@ -75,12 +91,15 @@ const START_MS = 110
  * should always have been — a cheap "have they stopped making noise" — and the
  * shorter window gets the transcript moving sooner.
  */
-const SILENCE_MS = 650
+const SILENCE_MS = 520
 /** Nobody speaks one segment for this long; cut it and transcribe what we have. */
 const MAX_MS = 20000
 
 /** The floor adapts slowly upward (a fan spinning up) and quickly downward (a
  *  door closing), so it settles to genuine ambient noise without chasing speech. */
+/** The loudest the room is ever assumed to be. Ordinary speech at a desk
+ *  microphone measures several times this. */
+const FLOOR_MAX = 0.01
 const FLOOR_UP = 0.0008
 const FLOOR_DOWN = 0.02
 
@@ -212,10 +231,17 @@ export async function startVad(h: VadHandlers): Promise<Vad> {
     if (!speaking && armedAt === 0) {
       const rate = smoothEnergy > floor ? FLOOR_UP : FLOOR_DOWN
       floor += (smoothEnergy - floor) * rate
-      floor = Math.max(floor, 0.0015)
+      // Bounded above as well as below. The floor is meant to follow the room,
+      // but it follows anything that never quite trips the trigger — a
+      // television, the score playing from the speakers, a long sentence
+      // spoken quietly — and climbs until ordinary speech is under it. From
+      // then on he hears nothing at all, and nothing on screen says why.
+      // Capped, the worst a loud room can do is make him a little hard of
+      // hearing; it can no longer make him deaf.
+      floor = Math.min(Math.max(floor, 0.0015), FLOOR_MAX)
     }
 
-    threshold = floor * TRIGGER_OVER_FLOOR * (guard ? GUARD_BOOST : 1)
+    threshold = Math.max(floor * TRIGGER_OVER_FLOOR, TRIGGER_MIN) * (guard ? GUARD_BOOST : 1)
     const release = threshold * RELEASE_RATIO
     const now = performance.now()
 

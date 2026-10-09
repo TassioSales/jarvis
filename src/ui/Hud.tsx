@@ -6,6 +6,7 @@ import { BladeSweep, Blades } from './Blades'
 import { Effects } from './Effects'
 import { Pointer } from './Pointer'
 import { GestureGuide } from './GestureGuide'
+import { t as tr } from '../lib/i18n'
 
 const statusText: Record<Phase, string> = {
   offline: 'OFFLINE',
@@ -159,6 +160,7 @@ export function Hud() {
   const gestures = useStore((s) => s.gestures)
   const looking = useStore((s) => s.looking)
   const ui = useStore((s) => s.ui)
+  const briefing = useStore((s) => s.briefing !== null)
 
   // accentFor folds JARVIS's overrides in over the phase colour, so one
   // variable on the root carries a theme change into every .hud-* rule without
@@ -202,7 +204,7 @@ export function Hud() {
                 the right thing to show during boot — as a general fallback a
                 note that never got cleared (a stuck 'voice 97%') sits over
                 LISTENING and PROCESSING for the rest of the session. */}
-            {phase === 'boot' && bootNote ? bootNote : statusText[phase]}
+            {phase === 'boot' && bootNote ? bootNote : tr(statusText[phase])}
           </span>
         </div>
       </header>
@@ -210,8 +212,8 @@ export function Hud() {
       {/* Left rail: which integrations are live */}
       {ui.chrome.systems && (
         <aside className="rail rail-left">
-          <div className="rail-title">SYSTEMS</div>
-          {connected.length === 0 && <div className="rail-item dim">none linked</div>}
+          <div className="rail-title">{tr('SYSTEMS')}</div>
+          {connected.length === 0 && <div className="rail-item dim">{tr('none linked')}</div>}
           {connected.map((c) => (
             <div key={c} className="rail-item">
               <span className="tick" />
@@ -227,7 +229,7 @@ export function Hud() {
 
       {/* Right rail: live telemetry, mostly for flavour */}
       <aside className="rail rail-right">
-        <div className="rail-title">SIGNAL</div>
+        <div className="rail-title">{tr('SIGNAL')}</div>
         <div className="meter">
           <div className="meter-fill" style={{ height: `${level * 100}%` }} />
         </div>
@@ -261,7 +263,9 @@ export function Hud() {
       </AnimatePresence>
 
       {/* Conversation log — last few turns, fading upward */}
-      {ui.chrome.transcript && (
+      {/* Not during a briefing: its caption is the transcript, and the two
+          would be the same sentence printed twice, one over the other. */}
+      {ui.chrome.transcript && !briefing && (
         <div className="log">
           <AnimatePresence initial={false}>
             {turns.slice(-4).map((t) => (
@@ -273,7 +277,7 @@ export function Hud() {
                 exit={{ opacity: 0 }}
                 transition={{ type: 'spring', stiffness: 320, damping: 32 }}
               >
-                <span className="log-who">{t.role === 'user' ? 'YOU' : 'JARVIS'}</span>
+                <span className="log-who">{t.role === 'user' ? tr('YOU') : 'JARVIS'}</span>
                 {/* Only his half decodes. What the user said was never
                     transmitted from anywhere — dressing it up as machine
                     output would be a lie about where the words came from. */}
@@ -312,7 +316,7 @@ export function Hud() {
 
       <footer className="hud-bottom">
         <span className="hint">
-          say <b>“hey jarvis”</b> · <kbd>Space</kbd> to talk · <kbd>G</kbd> hands
+          {tr('say')} <b>{tr('“hey jarvis”')}</b> · <kbd>Space</kbd> {tr('to talk')} · <kbd>G</kbd> {tr('hands')} · <kbd>F</kbd> {tr('face')} · <kbd>L</kbd> {tr('lock')}
           {voice && (
             <>
               {' · '}
@@ -332,7 +336,7 @@ export function Hud() {
       <Pointer />
       {(gestures || looking) && (
         <div className="hands-live">
-          {looking ? `LOOKING — ${looking.toUpperCase()}` : 'CAMERA ON · G TO STOP'}
+          {looking ? `${tr('LOOKING')} — ${looking.toUpperCase()}` : tr('CAMERA ON · G TO STOP')}
         </div>
       )}
       <GestureGuide live={gestures} />

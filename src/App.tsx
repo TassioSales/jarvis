@@ -3,15 +3,32 @@ import { Scene } from './scene/Scene'
 import { Hud } from './ui/Hud'
 import { Boot } from './ui/Boot'
 import { Ignition } from './ui/Ignition'
+import { Lock } from './ui/Lock'
+import { Briefing } from './ui/Briefing'
 import { Diagnostics } from './ui/Diagnostics'
 import { useStore } from './store'
-import { startVoice, type Voice, type VoiceMode } from './lib/voice'
+import {
+  HAIL_PATTERN,
+  NAME_PATTERN,
+  startVoice,
+  voiceLog,
+  type Voice,
+  type VoiceMode,
+} from './lib/voice'
 import { createSpeaker, cycleVoice, currentVoiceName } from './lib/tts'
 import * as sfx from './lib/sfx'
 import * as music from './lib/music'
 import * as hands from './lib/hands'
 import { listenForClap } from './lib/clap'
 import * as camera from './lib/camera'
+import * as face from './lib/face'
+import { publish } from './lib/sync'
+import {
+  INBOX_PROMPT,
+  inboxScenes,
+  loadScenes,
+  type Scene as BriefScene,
+} from './lib/briefing'
 import * as kokoro from './lib/kokoro'
 import { TTS_ENGINE } from './config'
 import { forTool, attention } from './lib/fillers'
@@ -32,6 +49,7 @@ import {
 import { startAnalyser, micLevel } from './lib/audio'
 import { probeCapabilities } from './lib/capabilities'
 import { env } from './config'
+import { t as tr } from './lib/i18n'
 
 /**
  * The conversation.
@@ -53,7 +71,7 @@ const AWAIT_SPEECH_MS = 14000
 /** After an answer, how long the mic stays open for a follow-up before he
  *  drops back to standby. Long enough that you don't have to say the name
  *  again to continue a thought. */
-const FOLLOW_UP_MS = 11000
+const FOLLOW_UP_MS = 9000
 
 /** crypto.randomUUID needs a secure context, which a LAN address over plain
  *  http is not. Not worth failing a whole turn over an id. */
@@ -63,11 +81,46 @@ const newId = () =>
 
 /** The same mishearings voice.ts accepts for the wake word — otherwise a turn
  *  that woke him as "travis" gets that word sent on to the model as a question. */
-const NAME = '(?:jarvis|jarvys|jervis|travis|jarviss|java\'s|jarv)'
+const NAME = NAME_PATTERN
+const HAIL = HAIL_PATTERN
 /** A bare vocative — "Jarvis", "hey jarvis" — with nothing asked. */
-const BARE_NAME = new RegExp(`^(?:hey|hi|ok|okay|yo)?\\s*${NAME}[\\s,.!?]*$`, 'i')
+const BARE_NAME = new RegExp(`^${HAIL}?\\s*${NAME}[\\s,.!?]*$`, 'i')
+/** His name anywhere in what was said, and everything up to and including it. */
+const UP_TO_NAME = new RegExp(`^.*?\\b${NAME}\\b[\\s,.:!?-]*`, 'i')
+/** "Jarvis, stop" — an order to be quiet, not a new question. */
+const STOP_CMD =
+  /^(?:pare|para|parar|chega|cancela|cancelar|cancele|sil[eê]ncio|quieto|stop|cancel|quiet|enough)\b[\s\S]{0,24}$/i
 /** A leading vocative on a real command: "Jarvis, what's the weather". */
-const LEADING_NAME = new RegExp(`^(?:hey|hi|ok|okay|yo)?\\s*${NAME}\\b[\\s,.:!?-]*`, 'i')
+const LEADING_NAME = new RegExp(`^${HAIL}?\\s*${NAME}\\b[\\s,.:!?-]*`, 'i')
+
+/**
+ * Orders he carries out himself, without asking the model.
+ *
+ * Locking and unlocking have to work while the model is unreachable, and they
+ * have to be instant — a lock that takes four seconds and a round trip to
+ * engage is not one. So these three are matched on the words. Each accepts the
+ * bare verb or the verb with an object ("bloquear", "bloquear os monitores"),
+ * and nothing longer: "bloquear o site da concorrência" is a question for the
+ * model, not a command to the lock.
+ */
+const THING =
+  '(?:\\s+(?:os?|as?|the|my|meus?|minhas?))?\\s+(?:monitor(?:es|s)?|sistemas?|systems?|telas?|screens?|tudo|everything|centro de comando)'
+const LOCK_CMD = new RegExp(
+  `^(?:bloquear|bloqueie|bloqueia|travar|trave|lock)(?:${THING})?[\\s.!]*$`,
+  'i',
+)
+const UNLOCK_CMD = new RegExp(
+  `^(?:ativar|ative|ativa|desbloquear|desbloqueie|destravar|liberar|libere|unlock|activate)(?:${THING})?[\\s.!]*$`,
+  'i',
+)
+const ENROL_CMD =
+  /^(?:cadastrar|cadastre|cadastra|registrar|registre|registra|gravar|grave|salvar|salve|aprender|aprenda|reconhecer|reconhe[cç]a|enrol|enroll|register|learn)\s+(?:o\s+|a\s+)?(?:(?:meu|minha|my)\s+)?(?:rosto|face|cara|reconhecimento facial|biometria)[\s.!]*$/i
+/** A greeting on its own is a request for the day (see briefing.ts). */
+const BRIEF_CMD =
+  /^(?:(?:muito\s+)?bom dia|boa tarde|boa noite|good (?:morning|afternoon|evening)|briefing|resumo(?: do dia)?|como est[aá] o dia)(?:[\s,]+(?:senhor|jarvis|sir))?[\s.!?]*$/i
+/** "It's me" — asking to be let in without naming the monitors. */
+const IDENTIFY_CMD =
+  /^(?:sou eu|confirmar?(?:\s+(?:a\s+)?minha)?\s+identidade|me\s+reconhe[cç]a|reconhecimento facial|it'?s me|identify me)[\s.!]*$/i
 
 export default function App() {
   const store = useStore
@@ -133,6 +186,7 @@ export default function App() {
     // putting its own up. Anything the model marked sticky survives.
     s.clearPanels()
     s.clearBlades()
+    s.setBriefing(null)
     s.setCaption('')
     s.pushTurn({ id: newId(), role: 'user', text: said })
     s.setPhase('thinking')
@@ -203,7 +257,7 @@ export default function App() {
       sfx.play('error')
       store
         .getState()
-        .setError(err instanceof Error ? err.message : 'Something went wrong.')
+        .setError(err instanceof Error ? err.message : tr('Something went wrong.'))
     } finally {
       if (!stale()) {
         speaker.current = null
@@ -216,6 +270,242 @@ export default function App() {
         listen(FOLLOW_UP_MS)
       }
     }
+  }
+
+  // -- the lock -------------------------------------------------------------
+
+  /** Say one line and wait for it to finish. */
+  const announce = async (line: string) => {
+    const spk = createSpeaker()
+    speaker.current = spk
+    spk.say(tr(line))
+    await spk.end()
+    if (speaker.current === spk) speaker.current = null
+  }
+
+  /** Let the lock's last state show for a moment, then clear it. */
+  const settleIdentity = () =>
+    setTimeout(() => store.getState().setIdentity('idle'), 2400)
+
+  /**
+   * Check who is asking, and let them in if it is the person who enrolled.
+   * `pending` is whatever they said along with his name; once they are through
+   * it is answered as if the lock had never been there.
+   */
+  const unlock = async (pending: string) => {
+    const mine = ++turn.current
+    const stale = () => mine !== turn.current
+    clearIdle()
+    silence()
+
+    const s = store.getState()
+    s.setPhase('thinking')
+    s.setIdentity('scanning')
+
+    // Spoken while he looks, not before: the scan is the slow part, and a
+    // sentence of warning is exactly how long it usually takes.
+    const speaking = announce('One moment while I confirm your identity.')
+    let verdict: face.Verdict | 'error'
+    try {
+      verdict = await face.verify(8000, stale)
+    } catch (err) {
+      console.error('[jarvis] identity check failed:', err)
+      verdict = 'error'
+    }
+    await speaking
+    if (stale()) {
+      store.getState().setIdentity('idle')
+      return
+    }
+
+    if (verdict === 'match') {
+      s.setLocked(false)
+      s.setIdentity('granted')
+      s.fireEffect('scan')
+      sfx.play('done')
+      await announce('Biometric identity confirmed, sir. Systems unlocked.')
+      settleIdentity()
+      if (stale()) return
+      if (pending && !UNLOCK_CMD.test(pending) && !IDENTIFY_CMD.test(pending)) handle(pending)
+      else listen(FOLLOW_UP_MS)
+      return
+    }
+
+    s.setIdentity('denied')
+    s.fireEffect('glitch')
+    sfx.play('error')
+    await announce(
+      verdict === 'stranger'
+        ? 'I do not recognise you. Access denied.'
+        : verdict === 'nobody'
+          ? 'I cannot see anyone, sir. Systems remain locked.'
+          : 'The camera is unavailable, sir. Systems remain locked.',
+    )
+    settleIdentity()
+    if (!stale()) goDormant()
+  }
+
+  const lock = async () => {
+    if (!face.enrolled()) {
+      ++turn.current
+      store.getState().setPhase('speaking')
+      await announce('There is no face on record, sir. Say: register my face.')
+      listen(FOLLOW_UP_MS)
+      return
+    }
+    const mine = ++turn.current
+    clearIdle()
+    const s = store.getState()
+    // What was on screen goes with it; a locked room does not leave the
+    // conversation up on the wall.
+    s.clearScreen('all')
+    s.setBriefing(null)
+    s.setLocked(true)
+    s.setIdentity('idle')
+    s.setPhase('speaking')
+    await announce('Systems locked, sir.')
+    if (mine === turn.current) goDormant()
+  }
+
+  const enrolFace = async () => {
+    const mine = ++turn.current
+    clearIdle()
+    const s = store.getState()
+    s.setPhase('thinking')
+    s.setIdentity('scanning')
+    const speaking = announce('Look at the camera, sir.')
+    let kept = 0
+    try {
+      kept = await face.enrol()
+    } catch (err) {
+      console.error('[jarvis] enrolment failed:', err)
+    }
+    await speaking
+    s.setIdentity(kept ? 'granted' : 'denied')
+    settleIdentity()
+    if (mine !== turn.current) return
+    s.setPhase('speaking')
+    await announce(
+      kept
+        ? 'Face registered, sir. Say: lock, whenever you want me to stand guard.'
+        : 'I could not see your face clearly, sir. Nothing was registered.',
+    )
+    if (mine === turn.current) listen(FOLLOW_UP_MS)
+  }
+
+  /**
+   * The day, as a run of cards. Each is put up, its sentence spoken, and then
+   * shelved for the next. Interrupting him by name stops it where it is and
+   * leaves what has been shown on screen.
+   */
+  const brief = async (said: string) => {
+    const mine = ++turn.current
+    const stale = () => mine !== turn.current
+    clearIdle()
+    silence()
+
+    const s = store.getState()
+    s.clearPanels()
+    s.clearBlades()
+    s.setBriefing(null)
+    s.setCaption('')
+    s.pushTurn({ id: newId(), role: 'user', text: said })
+    s.setPhase('thinking')
+
+    let scenes: Awaited<ReturnType<typeof loadScenes>> = []
+    try {
+      scenes = await loadScenes()
+    } catch (err) {
+      console.warn('[jarvis] briefing data unavailable:', err)
+    }
+    if (stale()) return
+    // Nothing to show — the bridge's feeds are down. The model can still make
+    // something of "good morning"; an empty briefing cannot.
+    if (!scenes.length) {
+      turn.current--
+      return void respond(said)
+    }
+
+    // The inbox and the calendar need the model, and the model needs several
+    // seconds. Asked for now and joined in when they arrive, they cost the
+    // briefing nothing: he is busy reading the weather while it works.
+    let extra: BriefScene[] | null = null
+    const inbox = usingBridge
+      ? ask(INBOX_PROMPT, [], { onText: () => {}, onTool: () => {} })
+          .then(({ text }) => inboxScenes(text))
+          .catch(() => [] as BriefScene[])
+          .then((found) => (extra = found))
+      : Promise.resolve((extra = []))
+
+    s.setPhase('speaking')
+    sfx.duck(true)
+    music.duck(true)
+    s.pushTurn({ id: newId(), role: 'jarvis', text: '' })
+
+    const cards: NonNullable<BriefScene['card']>[] = []
+    const queue = [...scenes]
+    let joined = false
+    let told = 0
+    while (queue.length) {
+      // After the weather at the earliest, and before the closing line at the
+      // latest — where it is worth a short wait rather than leaving them out.
+      if (!joined && told >= 2) {
+        if (extra === null && queue.length === 1) {
+          await Promise.race([inbox, new Promise((r) => setTimeout(r, 7000))])
+          if (stale()) return
+        }
+        if (extra !== null) {
+          joined = true
+          queue.unshift(...(extra as BriefScene[]))
+        }
+      }
+      const scene = queue.shift()!
+      told++
+      if (scene.card) cards.push(scene.card)
+      store.getState().setBriefing({
+        cards: [...cards],
+        // The closing line has no card of its own: everything goes to the shelf.
+        active: scene.card ? cards.length - 1 : -1,
+        caption: scene.line,
+      })
+      store.getState().appendToLastTurn(`${scene.line} `)
+
+      const spk = createSpeaker()
+      speaker.current = spk
+      spk.say(scene.line)
+      // A voice engine that never reports the end of a sentence must not
+      // freeze the briefing on one card for ever.
+      await Promise.race([
+        spk.end(),
+        new Promise((r) => setTimeout(r, 8000 + scene.line.length * 110)),
+      ])
+      if (stale()) return
+    }
+
+    speaker.current = null
+    sfx.duck(false)
+    music.duck(false)
+    sfx.play('done')
+    const shown = store.getState().briefing
+    if (shown) store.getState().setBriefing({ ...shown, active: -1, caption: '' })
+    listen(FOLLOW_UP_MS)
+  }
+
+  /** Everything he hears goes through here: the lock first, then the model. */
+  const handle = (said: string) => {
+    if (store.getState().locked) return void unlock(said)
+    if (LOCK_CMD.test(said)) return void lock()
+    if (ENROL_CMD.test(said)) return void enrolFace()
+    if (BRIEF_CMD.test(said)) return void brief(said)
+    if ((UNLOCK_CMD.test(said) || IDENTIFY_CMD.test(said)) && face.enrolled()) {
+      return void (async () => {
+        ++turn.current
+        store.getState().setPhase('speaking')
+        await announce('The systems are already active, sir.')
+        listen(FOLLOW_UP_MS)
+      })()
+    }
+    void respond(said)
   }
 
   // -- voice events ---------------------------------------------------------
@@ -246,7 +536,13 @@ export default function App() {
     // "Jarvis, what's happening in AI this week" in one breath. Waiting for a
     // greeting he didn't need is the most common way an assistant wastes time.
     if (trailing) {
-      void respond(trailing)
+      handle(trailing)
+      return
+    }
+
+    // Locked, his name alone is a request to be let in.
+    if (store.getState().locked) {
+      void unlock('')
       return
     }
 
@@ -271,27 +567,52 @@ export default function App() {
     clearIdle()
     const phase = store.getState().phase
     if (phase === 'offline' || phase === 'boot' || phase === 'dormant') return
+    // Someone finishing "…ativar monitor" as the scan starts is not an
+    // interruption, and treating it as one cancels the check they just asked for.
+    if (store.getState().identity === 'scanning') return
 
-    const wasBusy =
-      phase === 'thinking' || phase === 'tooling' || phase === 'speaking'
+    // While he is working or answering, a sound in the room is not an order.
+    // It used to be: a cough, the television or a second voice cut a search
+    // off half way, every time. Now he finishes what he started, and stopping
+    // him takes his name — which is decided on the words, in onUtterance.
+    if (isBusy(phase)) return
 
     silence()
-    if (wasBusy) {
-      // Abandon the answer in flight. The turn counter moves in respond()'s
-      // replacement; bumping it here covers the case where nothing replaces it.
-      turn.current++
-      interrupt()
-      store.getState().setActiveTool(null)
-      music.working(false)
-      sfx.duck(false)
-      music.duck(false)
-    }
     store.getState().setPhase('listening')
+  }
+
+  const isBusy = (phase: string) =>
+    phase === 'thinking' || phase === 'tooling' || phase === 'speaking'
+
+  /** Abandon the answer in flight. */
+  const cutOff = () => {
+    silence()
+    turn.current++
+    interrupt()
+    store.getState().setActiveTool(null)
+    music.working(false)
+    sfx.duck(false)
+    music.duck(false)
   }
 
   const onUtterance = (text: string) => {
     const phase = store.getState().phase
     if (phase === 'offline' || phase === 'boot' || phase === 'dormant') return
+
+    // Busy: only something addressed to him by name gets through. Everything
+    // else heard meanwhile is dropped, not queued — an overheard remark that
+    // surfaced as a question a minute later would be worse than a missed one.
+    if (isBusy(phase)) {
+      if (store.getState().identity === 'scanning' || !UP_TO_NAME.test(text)) {
+        voiceLog('ignored', { why: `busy (${phase}), not addressed by name`, text })
+        return
+      }
+      const order = text.replace(UP_TO_NAME, '').trim()
+      cutOff()
+      if (!order || STOP_CMD.test(order)) listen(AWAIT_SPEECH_MS)
+      else handle(order)
+      return
+    }
 
     // People keep using his name as a vocative once they're already talking to
     // him. Strip it rather than sending "jarvis" to the model as a question.
@@ -305,7 +626,7 @@ export default function App() {
       return
     }
 
-    void respond(said)
+    handle(said)
   }
 
   const onPartial = (text: string) => {
@@ -340,8 +661,8 @@ export default function App() {
         .getState()
         .setError(
           err instanceof Error
-            ? `Power-up failed: ${err.message}`
-            : 'Power-up failed. Click to try again.',
+            ? `${tr('Power-up failed')}: ${err.message}`
+            : tr('Power-up failed. Click to try again.'),
         )
     }
   }
@@ -454,11 +775,11 @@ export default function App() {
     // on screen still shows it. Better to say so than to let him quietly forget.
     watchConnection((state) => {
       if (state === 'lost') {
-        store.getState().setError('Bridge connection lost — reconnecting.')
+        store.getState().setError(tr('Bridge connection lost — reconnecting.'))
       } else if (state === 'reconnected') {
         store
           .getState()
-          .setError('Bridge reconnected. The previous conversation was not kept.')
+          .setError(tr('Bridge reconnected. The previous conversation was not kept.'))
       }
     })
     const warming = warm().catch((err: Error) => s.setError(err.message))
@@ -524,7 +845,17 @@ export default function App() {
       onError: onVoiceError,
     })
 
+    // Come up locked if there is a face to wait for. Decided here, at the end
+    // of boot, so the lock is in place before the wake word can be heard.
+    const guarded = face.enrolled()
+    if (guarded) store.getState().setLocked(true)
+
     store.getState().setPhase('dormant')
+
+    // Whoever just switched him on is usually the person he is waiting for,
+    // and is sitting in front of the camera. Look straight away rather than
+    // make them ask to be recognised by a machine that is looking at them.
+    if (guarded) void unlock('')
   }
 
   // -- clap to start --------------------------------------------------------
@@ -557,6 +888,19 @@ export default function App() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase])
+
+  // -- side monitors --------------------------------------------------------
+
+  // Whatever is open on the other monitors follows this window's state.
+  useEffect(() => publish(), [])
+
+  // In development, `__brief()` in the console runs the briefing without a
+  // microphone — the only way to work on it in a pane that has none.
+  useEffect(() => {
+    if (!import.meta.env.DEV) return
+    ;(window as unknown as Record<string, unknown>).__brief = () => void brief('bom dia')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // -- level pump + keys ----------------------------------------------------
 
@@ -596,7 +940,7 @@ export default function App() {
         silence()
         const demo = createSpeaker()
         speaker.current = demo
-        demo.say(`Voice set to ${name.replace(/\(.*?\)/g, '').trim()}. At your service, sir.`)
+        demo.say(`${tr('Voice set to')} ${name.replace(/\(.*?\)/g, '').trim()}. ${tr('At your service, sir.')}`)
         void demo.end()
         return
       }
@@ -621,7 +965,7 @@ export default function App() {
                 .getState()
                 .setError(
                   err?.name === 'NotAllowedError'
-                    ? 'Camera access denied — gesture control is unavailable.'
+                    ? tr('Camera access denied — gesture control is unavailable.')
                     : `Gesture control failed to start: ${err?.message ?? err}`,
                 )
             })
@@ -633,12 +977,26 @@ export default function App() {
       // model entirely. When "I can't hear him" is the report, this is the one
       // keypress that separates a broken voice engine from a broken voice loop
       // — and it prints the verdict rather than making you infer it.
+      // L locks, F enrols a face. Both are also spoken commands; the keys are
+      // for when the room is too loud to give one.
+      const idle = ['dormant', 'listening', 'waking'].includes(store.getState().phase)
+      if (e.key === 'l' && idle && !e.repeat && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        e.preventDefault()
+        if (!store.getState().locked) void lock()
+        return
+      }
+      if (e.key === 'f' && idle && !e.repeat && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        e.preventDefault()
+        if (!store.getState().locked) void enrolFace()
+        return
+      }
+
       if (e.key === 't' && !e.repeat && !e.metaKey && !e.ctrlKey && !e.altKey) {
         e.preventDefault()
         silence()
         const t = createSpeaker()
         speaker.current = t
-        t.say('Audio test. If you can hear this, speech output is working, sir.')
+        t.say(tr('Audio test. If you can hear this, speech output is working, sir.'))
         void t.end().then(() => {
           const d = (window as unknown as Record<string, Record<string, unknown>>).__tts
           console.info('[jarvis] audio test →', d)
@@ -700,6 +1058,8 @@ export default function App() {
       <Scene />
       <Hud />
       <Boot />
+      <Briefing />
+      <Lock />
       <Diagnostics />
       <Ignition onStart={() => void powerOn()} />
     </>
