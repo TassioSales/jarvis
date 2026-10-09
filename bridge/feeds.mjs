@@ -306,6 +306,14 @@ export function worldNote() {
         '.',
     )
   }
+  const n = news.peek()
+  if (n?.length) {
+    lines.push(
+      "Today's top headlines: " +
+        n.slice(0, 5).map((h) => `"${h.title}" (${h.source})`).join('; ') +
+        '. Enough to say what is in the news; anything beyond the headline itself needs looking up.',
+    )
+  }
   if (!lines.length) return ''
   return '\n\nLive readings you may state as fact (fetched minutes ago, their own city):\n- ' + lines.join('\n- ')
 }
@@ -313,3 +321,4 @@ export function worldNote() {
 // Fetched once at start so the first question about either finds them here.
 void weather().catch(() => {})
 void markets().catch(() => {})
+void news().catch(() => {})
