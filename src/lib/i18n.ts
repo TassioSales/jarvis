@@ -113,6 +113,7 @@ const PT: Record<string, string> = {
   'no tool in use': 'nenhuma ferramenta em uso',
   'nothing remembered yet': 'nada memorizado ainda',
   WEATHER: 'TEMPO',
+  'THE WEEK': 'A SEMANA',
   'feels like': 'sensação',
   humidity: 'umidade',
   wind: 'vento',

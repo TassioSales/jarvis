@@ -5,6 +5,8 @@ import { t } from '../lib/i18n'
 import { sky } from '../lib/weather'
 import { LockRing, Padlock } from './Lock'
 import { BarChart, LineChart } from './charts'
+import { Gauge, SkyIcon } from './glyphs'
+import { proxied } from '../lib/briefing'
 import './lock.css'
 
 /**
@@ -41,7 +43,10 @@ type Weather = {
   today: { min: number; max: number; rain: number }
   tomorrow: { min: number; max: number; rain: number }
   hours: { time: string; temp: number; rain: number }[]
+  week?: { date: string; code: number; min: number; max: number; rain: number }[]
 }
+
+type Story = { topic: string; title: string; source: string; image: string | null; at: string }
 
 type Headline = { title: string; source: string; at: string }
 
@@ -165,18 +170,36 @@ function Stat({ label, value }: { label: string; value: string }) {
   )
 }
 
-function Meter({ label, value, detail }: { label: string; value: number; detail: string }) {
-  const pct = Math.max(0, Math.min(100, value))
+/** Seven days as seven columns: the day, its sky, and where its temperatures
+ *  sit within the week's whole range — so a warm day reads as a bar set high. */
+function Week({ days }: { days: NonNullable<Weather['week']> }) {
+  const lo = Math.min(...days.map((d) => d.min))
+  const hi = Math.max(...days.map((d) => d.max))
+  const span = hi - lo || 1
   return (
-    <div className="sat-meter">
-      <div className="sat-meter-head">
-        <span>{label}</span>
-        <b>{detail}</b>
-      </div>
-      <div className="sat-meter-track">
-        <div className="sat-meter-fill" style={{ width: `${pct}%` }} />
-      </div>
-    </div>
+    <ol className="sat-days">
+      {days.map((day, i) => (
+        <li key={day.date}>
+          <span className="sat-day-name">
+            {i === 0
+              ? t('today')
+              : new Date(`${day.date}T12:00`).toLocaleDateString(LANG, { weekday: 'short' }).replace('.', '')}
+          </span>
+          <SkyIcon code={day.code} />
+          <b>{deg(day.max)}</b>
+          <div className="sat-day-range" title={`${deg(day.min)} – ${deg(day.max)}`}>
+            <i
+              style={{
+                bottom: `${((day.min - lo) / span) * 100}%`,
+                top: `${((hi - day.max) / span) * 100}%`,
+              }}
+            />
+          </div>
+          <span className="sat-day-min">{deg(day.min)}</span>
+          <span className="sat-day-rain">{day.rain}%</span>
+        </li>
+      ))}
+    </ol>
   )
 }
 
@@ -216,7 +239,10 @@ function Dashboard({ state }: { state: Snapshot }) {
         {weather ? (
           <div className="sat-weather-body">
             <div className="sat-hero">
-              <b>{deg(weather.now.temp)}</b>
+              <div className="sat-hero-top">
+                <SkyIcon code={weather.now.code} />
+                <b>{deg(weather.now.temp)}</b>
+              </div>
               <span>{t(sky(weather.now.code))}</span>
             </div>
             <div className="sat-stats">
@@ -234,6 +260,14 @@ function Dashboard({ state }: { state: Snapshot }) {
               <Stat label={`${t('rain')} · ${t('today')}`} value={`${weather.today.rain}%`} />
             </div>
           </div>
+        ) : (
+          <p className="sat-dim">{t('no data')}</p>
+        )}
+      </Card>
+
+      <Card className="sat-week" title={t('THE WEEK')}>
+        {weather?.week?.length ? (
+          <Week days={weather.week} />
         ) : (
           <p className="sat-dim">{t('no data')}</p>
         )}
@@ -273,16 +307,14 @@ function Dashboard({ state }: { state: Snapshot }) {
       </Card>
 
       <Card className="sat-machine" title={t('MACHINE')} aside={machine?.host}>
-        <Meter
-          label={t('MEMORY')}
-          value={mem}
-          detail={machine ? `${gb(machine.memUsed)} / ${gb(machine.memTotal)} GB` : '—'}
-        />
-        <Meter
-          label="CPU"
-          value={machine?.cpu ?? 0}
-          detail={machine ? `${Math.round(machine.cpu)}%` : '—'}
-        />
+        <div className="sat-dials">
+          <Gauge label="CPU" value={machine?.cpu ?? 0} />
+          <Gauge
+            label={t('MEMORY')}
+            value={mem}
+            detail={machine ? `${gb(machine.memUsed)} / ${gb(machine.memTotal)} GB` : undefined}
+          />
+        </div>
         <div className="sat-stats sat-stats-2">
           <Stat label={t('UPTIME')} value={machine ? uptime(machine.uptime) : '—'} />
           <Stat label={t('VOICE')} value={machine?.voice ?? '—'} />
@@ -342,11 +374,26 @@ function World() {
   const time = useClock()
   const headlines = usePoll<Headline[]>('/news', 5 * 60_000, true)
   const quotes = usePoll<Quote[]>('/markets', 5 * 60_000, true)
+  const stories = usePoll<Story[]>('/stories', 5 * 60_000, true)
+  // The lead is whichever subject story came with a picture; a lead without
+  // one is just a headline set in larger type.
+  const lead = stories?.find((story) => story.image) ?? null
 
   return (
     <div className="sat-grid sat-world">
       <Card className="sat-news" title={t('HEADLINES')}>
-        <Headlines items={headlines} now={time} count={8} />
+        {lead?.image && (
+          <figure className="sat-lead">
+            <img src={proxied(lead.image)} alt="" />
+            <figcaption>
+              <span>
+                {lead.topic} · {lead.source} · {ago(lead.at, time)}
+              </span>
+              <p>{lead.title}</p>
+            </figcaption>
+          </figure>
+        )}
+        <Headlines items={headlines} now={time} count={lead?.image ? 5 : 8} />
       </Card>
 
       {(quotes ?? []).map((quote) => (

@@ -25,6 +25,7 @@ import { join } from 'node:path'
  *        ↕  Chrome Native Messaging: 4-byte little-endian length + JSON
  *   chrome-native-host
  *        ↕  Unix socket: /tmp/claude-mcp-browser-bridge-<user>/<pid>.sock
+ *           (on Windows, a named pipe of the same name)
  *   whoever connects  ← this file
  *
  * What Claude Code normally does at that last step is detour through
@@ -82,6 +83,22 @@ const CONNECT_TIMEOUT_MS = 3_000
  * accepted as a last resort, because on some setups it is all there is.
  */
 async function findSocket() {
+  // Windows has no socket files. The native host listens on a named pipe
+  // instead, with a fixed name and no pid in it, so there is nothing to scan
+  // for and nothing stale to pick by mistake: the pipe exists exactly while a
+  // host is running. Looking in /tmp here found nothing, ever, and reported a
+  // perfectly healthy extension as not installed.
+  if (process.platform === 'win32') {
+    const name = `claude-mcp-browser-bridge-${userInfo().username}`
+    // A pipe cannot be stat()ed the way a socket file can, but the pipe
+    // namespace can be listed like a directory.
+    try {
+      return (await readdir('\\\\.\\pipe\\')).includes(name) ? `\\\\.\\pipe\\${name}` : null
+    } catch {
+      return null
+    }
+  }
+
   let names
   try {
     names = await readdir(SOCKET_DIR)

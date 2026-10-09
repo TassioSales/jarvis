@@ -229,6 +229,26 @@
   color: var(--interface);
 }
 
+/* A drawing-board grid behind the cards, brightest in the middle and gone by
+   the edges. It drifts, slowly enough that it is felt rather than watched. */
+.sat::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background-image:
+    linear-gradient(color-mix(in srgb, var(--interface) 9%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--interface) 9%, transparent) 1px, transparent 1px);
+  background-size: 56px 56px;
+  mask-image: radial-gradient(ellipse at center, #000 20%, transparent 78%);
+  animation: sat-drift 40s linear infinite;
+}
+@keyframes sat-drift {
+  to {
+    background-position: 56px 56px;
+  }
+}
+
 .sat-top {
   justify-self: stretch;
   display: flex;
@@ -335,10 +355,13 @@
   grid-template-rows: auto minmax(0, 1.15fr) minmax(0, 1fr);
 }
 .sat-clock {
-  grid-column: span 5;
+  grid-column: span 3;
 }
 .sat-weather {
-  grid-column: span 7;
+  grid-column: span 5;
+}
+.sat-week {
+  grid-column: span 4;
 }
 .sat-temp {
   grid-column: span 7;
@@ -416,6 +439,17 @@
   height: 2px;
   background: var(--interface);
   box-shadow: 0 0 10px var(--interface);
+}
+.sat-card::after {
+  content: '';
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  width: 18px;
+  height: 18px;
+  border-right: 2px solid color-mix(in srgb, var(--interface) 70%, transparent);
+  border-bottom: 2px solid color-mix(in srgb, var(--interface) 70%, transparent);
+  pointer-events: none;
 }
 .sat-card:nth-child(2) {
   animation-delay: 0.07s;
@@ -502,6 +536,14 @@
   display: grid;
   gap: 4px;
 }
+.sat-hero-top {
+  display: flex;
+  align-items: center;
+  gap: clamp(10px, 1.6vmin, 20px);
+}
+.sat-hero .sky {
+  width: clamp(34px, 6.4vmin, 76px);
+}
 .sat-hero b {
   font-size: clamp(40px, 9vmin, 104px);
   font-weight: 300;
@@ -548,6 +590,186 @@
   white-space: nowrap;
   color: var(--ink);
   font-variant-numeric: tabular-nums;
+}
+
+/* ---- drawn pieces */
+
+.sky {
+  width: clamp(20px, 3vmin, 34px);
+  aspect-ratio: 1;
+  fill: none;
+  stroke: var(--interface);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 0 5px color-mix(in srgb, var(--interface) 55%, transparent));
+}
+
+.sat-dials {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: clamp(8px, 1.6vmin, 20px);
+  flex: 1;
+  min-height: 0;
+  align-items: center;
+}
+.gauge {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  min-height: 0;
+}
+.gauge svg {
+  width: min(100%, clamp(84px, 15vmin, 168px));
+  aspect-ratio: 1;
+  /* Start the arc at seven o'clock, so the gap sits at the bottom. */
+  transform: rotate(135deg);
+}
+.gauge circle {
+  fill: none;
+  stroke-width: 6;
+  stroke-linecap: round;
+}
+.gauge-track {
+  stroke: color-mix(in srgb, var(--interface) 14%, transparent);
+}
+.gauge-fill {
+  stroke: var(--interface);
+  filter: drop-shadow(0 0 5px color-mix(in srgb, var(--interface) 70%, transparent));
+  transition: stroke-dasharray 0.9s ease-out;
+}
+.gauge-hot .gauge-fill {
+  stroke: var(--warn);
+  filter: drop-shadow(0 0 5px var(--warn));
+}
+.gauge text {
+  /* The dial is turned; the number is turned back. */
+  transform: rotate(-135deg);
+  transform-origin: 50px 50px;
+  font-family: 'Chakra Petch', system-ui, sans-serif;
+  font-size: 25px;
+  font-weight: 300;
+  fill: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.gauge text .gauge-unit {
+  font-size: 12px;
+  fill: var(--ink-3);
+}
+.gauge-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: clamp(9px, 1.15vmin, 12px);
+  letter-spacing: 0.22em;
+  color: var(--ink-2);
+}
+.gauge-detail {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: clamp(9px, 1.05vmin, 11px);
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- the week */
+
+.sat-days {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: clamp(4px, 0.8vmin, 10px);
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.sat-days li {
+  display: grid;
+  grid-template-rows: auto auto auto minmax(18px, 1fr) auto auto;
+  justify-items: center;
+  gap: 4px;
+  min-height: 0;
+  padding: 6px 2px;
+  border-left: 1px solid var(--rule);
+}
+.sat-days li:first-child {
+  border-left: 0;
+  background: color-mix(in srgb, var(--interface) 7%, transparent);
+}
+.sat-day-name {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: clamp(9px, 1.1vmin, 12px);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+.sat-days b {
+  font-size: clamp(12px, 1.8vmin, 19px);
+  font-weight: 400;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.sat-day-range {
+  position: relative;
+  width: 5px;
+  min-height: 18px;
+  background: color-mix(in srgb, var(--interface) 12%, transparent);
+  border-radius: 3px;
+}
+.sat-day-range i {
+  position: absolute;
+  right: 0;
+  left: 0;
+  border-radius: 3px;
+  background: var(--interface);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--interface) 60%, transparent);
+}
+.sat-day-min {
+  font-size: clamp(10px, 1.4vmin, 15px);
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+.sat-day-rain {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: clamp(8px, 1vmin, 11px);
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- the lead story */
+
+.sat-lead {
+  position: relative;
+  flex: none;
+  margin: 0 0 clamp(10px, 1.6vmin, 18px);
+  overflow: hidden;
+  border: 1px solid var(--rule);
+}
+.sat-lead img {
+  display: block;
+  width: 100%;
+  height: clamp(120px, 26vh, 300px);
+  object-fit: cover;
+  filter: saturate(0.8) contrast(1.05);
+}
+.sat-lead figcaption {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  padding: clamp(24px, 5vmin, 56px) clamp(10px, 1.6vmin, 18px) clamp(8px, 1.3vmin, 14px);
+  background: linear-gradient(to top, rgb(1 6 12 / 0.96) 35%, transparent);
+}
+.sat-lead span {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: clamp(9px, 1.1vmin, 12px);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--interface);
+}
+.sat-lead p {
+  margin: 4px 0 0;
+  font-size: clamp(14px, 2.2vmin, 24px);
+  line-height: 1.25;
+  color: var(--ink);
 }
 
 /* ---- charts */
@@ -835,6 +1057,7 @@
   .lock-core::after,
   .lock-veil,
   .sat-card,
+  .sat::before,
   .sat-phase i {
     animation: none;
   }

@@ -81,11 +81,11 @@ const place = cached(PLACE_TTL, async () => {
 export const weather = cached(WEATHER_TTL, async () => {
   const at = await place()
   const data = await getJson(
-    'https://api.open-meteo.com/v1/forecast?timezone=auto&forecast_days=2' +
+    'https://api.open-meteo.com/v1/forecast?timezone=auto&forecast_days=7' +
       `&latitude=${at.lat}&longitude=${at.lon}` +
       '&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m' +
       '&hourly=temperature_2m,precipitation_probability' +
-      '&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max',
+      '&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max',
   )
 
   // The next twenty-four hours, starting from the hour we are in — a chart
@@ -121,6 +121,14 @@ export const weather = cached(WEATHER_TTL, async () => {
       rain: data.daily.precipitation_probability_max[1] ?? 0,
     },
     hours,
+    // The week ahead, today first.
+    week: data.daily.time.map((date, i) => ({
+      date,
+      code: data.daily.weather_code[i],
+      min: data.daily.temperature_2m_min[i],
+      max: data.daily.temperature_2m_max[i],
+      rain: data.daily.precipitation_probability_max[i] ?? 0,
+    })),
   }
 })
 
@@ -267,6 +275,8 @@ const stories = cached(NEWS_TTL, async () => {
   )
   return found.filter(Boolean)
 })
+
+export { stories }
 
 /** Everything the briefing reads out, gathered in one request. */
 export async function briefing() {
