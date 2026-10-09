@@ -338,10 +338,10 @@ function decide(name, writes) {
     if (server === 'jarvis_memory') return true
 
     // His hands on the machine. The media keys do nothing a keyboard does not,
-    // and looking at the list of routines changes nothing; both run freely.
+    // and a routine is only a list in his own file until it is run; those go ahead.
     // Everything else here opens something, and is asked about first.
     if (server === 'jarvis_do') {
-      return /^(media|list_routines)$/.test(mcpToolOf(name)) ? true : writes
+      return /^(media|list_routines|save_routine|delete_routine)$/.test(mcpToolOf(name)) ? true : writes
     }
 
     const tool = mcpToolOf(name)
@@ -380,7 +380,7 @@ function describeAction(name, input = {}) {
   // "Run work mode" says nothing about what will happen; the steps do.
   const routine = name === 'mcp__jarvis_do__run_routine' ? routineSteps(input?.name) : null
   const detail = routine
-    ? routine.join('\n')
+    ? routine.join(' · ')
     : name === 'Bash'
       ? pick('command')
       : ['Write', 'Edit', 'MultiEdit', 'NotebookEdit'].includes(name)
