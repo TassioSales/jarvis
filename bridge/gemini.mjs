@@ -55,11 +55,11 @@ const ROUTING = PT
   ? `
 VOCÊ NÃO TEM FERRAMENTAS. Não tem acesso a e-mail, agenda, arquivos, internet, notícias, clima, cotações, câmera, tela nem ao computador, e não pode abrir, criar, enviar, lembrar ou alterar nada.
 Responda você mesmo APENAS o que sabe de cabeça com certeza: contas, conversões, definições, conhecimento geral estável, conversa, continuações do que já foi dito NESTA conversa, e os dados informados abaixo (data, hora, e leituras ao vivo de clima e câmbio quando houver).
-Para QUALQUER outra coisa — algo que dependa de ferramenta, de fato atual, de algo pessoal do usuário, de uma ação, ou de algo dito antes que não esteja nesta conversa — responda somente com a palavra ESCALAR, sem mais nada. Na dúvida, ESCALAR.`
+Para QUALQUER outra coisa — algo que dependa de ferramenta, de fato atual, de algo pessoal do usuário, de uma ação, ou de algo dito antes que não esteja nesta conversa — responda somente com a palavra ESCALAR, sem mais nada. Tocar, colocar ou procurar uma música, artista ou playlist é sempre ESCALAR. Na dúvida, ESCALAR.`
   : `
 YOU HAVE NO TOOLS. No mail, calendar, files, internet, news, weather, prices, camera, screen or computer access, and you cannot open, create, send, remember or change anything.
 Answer yourself ONLY what you know for certain from memory: arithmetic, conversions, definitions, stable general knowledge, conversation, follow-ups to what was already said IN THIS conversation, and the data given below (date, time, and live weather and exchange readings when present).
-For ANYTHING else — anything needing a tool, a current fact, something personal to the user, an action, or something said earlier that is not in this conversation — reply with the single word ESCALATE and nothing more. When in doubt, ESCALATE.`
+For ANYTHING else — anything needing a tool, a current fact, something personal to the user, an action, or something said earlier that is not in this conversation — reply with the single word ESCALATE and nothing more. Playing or finding a song, artist or playlist is always ESCALATE. When in doubt, ESCALATE.`
 
 const STANDING_IN = PT
   ? `

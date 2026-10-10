@@ -19,7 +19,7 @@ function source(text, name) {
 
 const NAME_PATTERN = eval(source(voice, 'NAME_PATTERN'))
 const HAIL_PATTERN = eval(source(voice, 'HAIL_PATTERN'))
-const WAKE = new RegExp(`\\b${HAIL_PATTERN}?\\s*${NAME_PATTERN}\\b(?!'s)`, 'i')
+const WAKE = eval(source(voice, 'WAKE'))
 const GREETING = eval(source(voice, 'GREETING'))
 
 // App.tsx builds some of its patterns from these two.
@@ -36,7 +36,7 @@ void NAME
 
 const cases = {
   WAKE: {
-    yes: ['Jarvis', 'jarvis, que horas são?', 'Ei, Jarvis', 'Jarves', 'Jarvez', 'Jarviz', 'Jarbis', 'Javis', 'Jervis', 'Jairvis', 'Djarvis', 'Járvis', 'Jarbas', 'Charvis', 'Travis', 'ô Jarvis', 'Oi Jarvis, bom dia', 'Daves', 'Dávis'],
+    yes: ['Jarvis', 'jarvis, que horas são?', 'Ei, Jarvis', 'Jarves', 'Jarvez', 'Jarviz', 'Jarbis', 'Javis', 'Jervis', 'Jairvis', 'Djarvis', 'Járvis', 'Jarbas', 'Charvis', 'Travis', 'ô Jarvis', 'Oi Jarvis, bom dia', 'Daves', 'Dávis', 'Charles', 'Jaz', 'James, Spotify já tá ativo', 'Tá pensando, seu Java?', 'Java'],
     no: ['já vi esse filme', 'a jarra está cheia', 'vou viajar amanhã', 'que horas são', 'chaves do carro', 'o javali', 'java é uma linguagem', 'jardim', 'a televisão está alta', 'serviço', 'devo ir'],
   },
   GREETING: {
@@ -65,9 +65,13 @@ let checks = 0
 const MEDIA_CMDS = eval(source(app, 'MEDIA_CMDS'))
 const mediaFor = (text) => MEDIA_CMDS.find(([re]) => re.test(text.trim()))?.[1] ?? null
 for (const [text, expected] of [
-  ['pausa', 'toggle'],
-  ['Pausa a música.', 'toggle'],
-  ['play', 'toggle'],
+  ['pausa', 'pause'],
+  ['Pausa a música.', 'pause'],
+  ['para a música', 'pause'],
+  ['play', 'play'],
+  ['toca', 'play'],
+  ['Toca Bloody Groove', null],
+  ['toca uma música do Sepultura', null],
   ['próxima', 'next'],
   ['pula essa música', 'next'],
   ['anterior', 'previous'],

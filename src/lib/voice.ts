@@ -95,10 +95,16 @@ const WAKE_DEBOUNCE = 1500
  * one first. The handful that do not fit the shape are listed after it.
  */
 export const NAME_PATTERN =
-  "(?:d?j[aáeé]i?(?:r[vb][iíeay][szx]?s?|[vb][iíeay][szx]s?)|d[aá]r?v[eiy]s|ch[aá]r[vb]is|travis|java's|jarv)"
+  "(?:d?j[aáeé]i?(?:r[vb][iíeay][szx]?s?|[vb][iíeay][szx]s?)|d[aá]r?v[eiy]s|ch[aá]r[vb]is|charles|james|jazz?|travis|java's|jarv)"
 export const HAIL_PATTERN = '(?:hey|hi|ok|okay|yo|ei|oi|olá|ola|ô|o)'
 
-const WAKE = new RegExp(`\\b${HAIL_PATTERN}?\\s*${NAME_PATTERN}\\b(?!'s)`, 'i')
+const WAKE = new RegExp(
+  // "Java" is what he was called in the log more than once, and is also an
+  // ordinary word. It counts only as a hail on its own or at the very end —
+  // "tá pensando, seu Java?" — never in the middle of a sentence about coffee.
+  `\\b${HAIL_PATTERN}?\\s*${NAME_PATTERN}\\b(?!'s)|(?:^|\\bseu\\s+|,\\s*)java[\\s.?!]*$`,
+  'i',
+)
 
 /**
  * A greeting and nothing else. Short on purpose — the whole utterance has to

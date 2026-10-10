@@ -82,7 +82,7 @@ const SPEAKING_GRACE_MS = 28000
 /** After an answer, how long the mic stays open for a follow-up before he
  *  drops back to standby. Long enough that you don't have to say the name
  *  again to continue a thought. */
-const FOLLOW_UP_MS = 9000
+const FOLLOW_UP_MS = 20000
 
 /** crypto.randomUUID needs a secure context, which a LAN address over plain
  *  http is not. Not worth failing a whole turn over an id. */
@@ -141,7 +141,8 @@ const NO_CMD = /^(?:n[aã]o|nunca|cancela|cancelar|cancele|negativo|pare|para|de
  * longer, each mapped to a media key and a number of presses.
  */
 const MEDIA_CMDS: [RegExp, string, number][] = [
-  [/^(?:pausa|pausar|pause|play|toca|tocar|continua a m[uú]sica|retoma(?:r)?(?: a m[uú]sica)?|(?:pausa|pausar|para|parar|toca|tocar) (?:a m[uú]sica|o v[ií]deo|o som))[\s.!]*$/i, 'toggle', 1],
+  [/^(?:pausa|pausar|pause|(?:pausa|pausar|para|parar) (?:a m[uú]sica|o v[ií]deo|o som))[\s.!]*$/i, 'pause', 1],
+  [/^(?:play|toca|tocar|continua(?:r)? (?:a m[uú]sica|o v[ií]deo)|retoma(?:r)?(?: a m[uú]sica)?|(?:toca|tocar|solta) (?:a m[uú]sica|o v[ií]deo|o som))[\s.!]*$/i, 'play', 1],
   [/^(?:pr[oó]xima(?: m[uú]sica| faixa)?|pula(?:r)?(?: (?:essa|esta|a) (?:m[uú]sica|faixa))?|next(?: (?:song|track))?)[\s.!]*$/i, 'next', 1],
   [/^(?:(?:m[uú]sica |faixa )?anterior|volta(?:r)? (?:a|uma) (?:m[uú]sica|faixa)|previous(?: (?:song|track))?)[\s.!]*$/i, 'previous', 1],
   [/^(?:aumenta(?:r)?|sobe|subir)(?: um pouco)?(?: o)? (?:volume|som)|^(?:mais alto|volume up)[\s.!]*$/i, 'volume_up', 5],

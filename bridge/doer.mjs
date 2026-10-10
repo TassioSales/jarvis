@@ -4,6 +4,7 @@ import { spawn } from 'node:child_process'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 
 /**
  * The few things he does to the machine directly: the media keys, opening a
@@ -60,6 +61,76 @@ export function pressMedia(action, times = 1) {
     child.on('error', () => resolve(false))
     child.on('exit', (status) => resolve(status === 0))
   })
+}
+
+/**
+ * Windows' own media sessions: what is playing, and an explicit pause or play.
+ *
+ * A media key only toggles, so "pause" said into a silent room starts the
+ * music. Windows will pause or resume a session outright and say what it is
+ * playing; scripts/media.ps1 asks it to. That script needs Windows PowerShell
+ * 5.1 — the types it uses do not exist in PowerShell 7 — hence `powershell`
+ * here and not `pwsh`.
+ *
+ * @param {'status' | 'pause' | 'play'} action
+ * @returns {Promise<{app: string, status: string, artist: string, title: string}[] | null>}
+ */
+const MEDIA_SCRIPT = fileURLToPath(new URL('../scripts/media.ps1', import.meta.url))
+
+export function mediaSession(action = 'status') {
+  if (process.platform !== 'win32' || !['status', 'pause', 'play'].includes(action)) {
+    return Promise.resolve(null)
+  }
+  return new Promise((resolve) => {
+    const child = spawn(
+      'powershell',
+      ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', MEDIA_SCRIPT, '-Action', action],
+      { windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] },
+    )
+    let out = ''
+    child.stdout.on('data', (d) => (out += d))
+    const timer = setTimeout(() => child.kill(), 9000)
+    child.on('error', () => resolve(null))
+    child.on('exit', () => {
+      clearTimeout(timer)
+      try {
+        const parsed = JSON.parse(out.trim() || '[]')
+        resolve(Array.isArray(parsed) ? parsed : [parsed])
+      } catch {
+        resolve(null)
+      }
+    })
+  })
+}
+
+/**
+ * A Spotify address the desktop app will open, from a URI or a share link.
+ *
+ * Only the shape Spotify itself hands out is accepted — a kind and a 22
+ * character id — so this can be opened without asking: there is nothing in it
+ * but a pointer into Spotify's own catalogue.
+ */
+export function spotifyUri(value) {
+  const v = String(value ?? '').trim()
+  const kinds = 'track|episode|album|playlist|artist|show'
+  let m = new RegExp(`^spotify:(${kinds}):([A-Za-z0-9]{22})$`).exec(v)
+  if (m) return `spotify:${m[1]}:${m[2]}`
+  m = new RegExp(`^https://open\\.spotify\\.com/(?:intl-[a-z-]+/)?(${kinds})/([A-Za-z0-9]{22})(?:[?#].*)?$`).exec(v)
+  return m ? `spotify:${m[1]}:${m[2]}` : null
+}
+
+/**
+ * One entry point for everything about playback: pause and play are done
+ * explicitly through the media session, the rest are keys.
+ */
+export async function control(action, times = 1) {
+  if (action === 'pause' || action === 'play') {
+    const done = await mediaSession(action)
+    // No session to talk to — an app that does not register one. Fall back to
+    // the key, which at least reaches it.
+    return done?.length ? true : pressMedia('toggle')
+  }
+  return pressMedia(action, times)
 }
 
 // ------------------------------------------------------------------ opening
@@ -138,11 +209,46 @@ export function doServer() {
           'the volume. Works on whatever is playing on this computer. `times` repeats ' +
           'the key, which is how volume is moved by more than one step (each is 2%).',
         {
-          action: z.enum(['toggle', 'next', 'previous', 'stop', 'volume_up', 'volume_down', 'mute']),
+          action: z.enum(['pause', 'play', 'toggle', 'next', 'previous', 'stop', 'volume_up', 'volume_down', 'mute']),
           times: z.number().optional().describe('How many presses. Default 1; about 5 for "a bit louder".'),
         },
         async ({ action, times }) =>
-          text((await pressMedia(action, times)) ? 'Done.' : 'Media keys are not available on this machine.'),
+          text((await control(action, times)) ? 'Done.' : 'Media control is not available on this machine.'),
+      ),
+      tool(
+        'play',
+        'Play something on Spotify, on this computer. Give the `uri` (or the ' +
+          'open.spotify.com link) of what to play, as returned by a Spotify search. ' +
+          'A track or an episode starts playing at once. An album, playlist or ' +
+          'artist only opens in the app without starting — so when they ask for ' +
+          'an artist or "some music by", search for tracks and play one of those.',
+        { uri: z.string().describe('spotify:track:… or an open.spotify.com link.') },
+        async ({ uri }) => {
+          const target = spotifyUri(uri)
+          if (!target) return text('That is not a Spotify address. Search Spotify first and pass the uri it returns.')
+          if (!(await open(target))) return text('Spotify could not be opened on this machine.')
+          return text(
+            /^spotify:(track|episode):/.test(target)
+              ? 'Playing.'
+              : 'Opened in Spotify, but that kind of item does not start by itself.',
+          )
+        },
+      ),
+      tool(
+        'now_playing',
+        'What is playing on this computer right now, and in which app.',
+        {},
+        async () => {
+          const sessions = await mediaSession('status')
+          if (!sessions) return text('That cannot be read on this machine.')
+          const live = sessions.filter((s) => s.title)
+          if (!live.length) return text('Nothing is playing.')
+          return text(
+            live
+              .map((s) => `${s.app}: ${s.status.toLowerCase()} — ${[s.artist, s.title].filter(Boolean).join(' – ')}`)
+              .join('\n'),
+          )
+        },
       ),
       tool(
         'open',
