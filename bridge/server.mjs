@@ -33,7 +33,7 @@ import {
   weather,
   worldNote,
 } from './feeds.mjs'
-import { geminiModel, geminiReady, quick } from './gemini.mjs'
+import { transcribe, geminiModel, geminiReady, quick } from './gemini.mjs'
 import { dueReminders } from './reminders.mjs'
 import { control, doServer, routineSteps } from './doer.mjs'
 import { mapsReady, mapsServer } from './maps.mjs'
@@ -703,6 +703,8 @@ function elevenKey() {
   }
 }
 
+/** Until when the speech service is left alone after refusing for lack of credit. */
+let sttRestUntil = 0
 const VOICE_ID = process.env.JARVIS_VOICE_ID ?? 'JBFqnCBsd6RMkjVDRZzb'
 
 /**
@@ -1260,7 +1262,7 @@ const handleRequest = async (req, res) => {
   // touches this endpoint; this is only for the words.
   if (req.method === 'POST' && req.url === '/stt') {
     const key = elevenKey()
-    if (!key) {
+    if (!key && !geminiReady()) {
       res.writeHead(503, cors)
       return res.end('no elevenlabs key')
     }
@@ -1290,6 +1292,18 @@ const handleRequest = async (req, res) => {
       res.writeHead(200, { ...cors, 'content-type': 'application/json' })
       return res.end(JSON.stringify({ text: '' }))
     }
+
+    // Out of credit, the speech service refuses every clip. Asking it again
+    // for each one only adds a failed round trip before the understudy is
+    // tried, so it is left alone for a while once it has said no.
+    const viaGemini = async () => {
+      const heard = await transcribe(Buffer.concat(chunks), type)
+      if (heard === null) return false
+      res.writeHead(200, { ...cors, 'content-type': 'application/json' })
+      res.end(JSON.stringify({ text: heard, by: 'gemini' }))
+      return true
+    }
+    if ((!key || Date.now() < sttRestUntil) && geminiReady() && (await viaGemini())) return
 
     try {
       // The filename extension is the only hint Scribe gets about the codec, so
@@ -1323,8 +1337,14 @@ const handleRequest = async (req, res) => {
         body: form,
       })
       if (!upstream.ok) {
+        const why = await upstream.text()
+        if ([401, 402, 429].includes(upstream.status) && geminiReady()) {
+          sttRestUntil = Date.now() + 15 * 60_000
+          console.warn(`[jarvis] speech-to-text refused (${upstream.status}); Gemini is transcribing for now`)
+          if (await viaGemini()) return
+        }
         res.writeHead(upstream.status, cors)
-        return res.end(await upstream.text())
+        return res.end(why)
       }
       const data = await upstream.json()
       res.writeHead(200, { ...cors, 'content-type': 'application/json' })

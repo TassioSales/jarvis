@@ -375,7 +375,17 @@ type Item = {
   audio?: Promise<string | null> | null
 }
 
-export function createSpeaker(): Speaker {
+/** Until when the cloud voice is left alone after refusing for lack of credit.
+ *  Every sentence otherwise pays for a failed round trip before the system
+ *  voice gets to say it. */
+let cloudRestUntil = 0
+
+/**
+ * @param opts.local  speak in the system voice even when the cloud one is
+ *   available. For long recitals — the briefing, a reminder — where the
+ *   cloud voice's monthly allowance goes fastest and matters least.
+ */
+export function createSpeaker(opts: { local?: boolean } = {}): Speaker {
   const queue: Item[] = []
   let buffer = ''
   let cancelled = false
@@ -418,6 +428,10 @@ export function createSpeaker(): Speaker {
     // premium path automatic with no flag to set. It falls back to the browser
     // voice on any failure, so a student without a key still hears him speak.
     // `nativeBroken` latches on once the system voice has proved unusable.
+    if (opts.local && !nativeBroken) {
+      diag.engine = 'system'
+      return null
+    }
     if (USE_ELEVENLABS || caps().tts || nativeBroken) {
       // Recorded at the moment the tier is chosen rather than only when the
       // native voice latches over. Without this the panel reported 'system'
@@ -779,6 +793,7 @@ export function createSpeaker(): Speaker {
 /** Only used when USE_ELEVENLABS is on. Bridge proxy first (it already holds
  *  the key), then a direct key, then null to fall back to the native voice. */
 async function fetchCloudAudio(text: string): Promise<string | null> {
+  if (Date.now() < cloudRestUntil) return null
   if (BACKEND === 'bridge') {
     try {
       const res = await fetch(`${BRIDGE_HTTP_URL}/tts`, {
@@ -787,6 +802,10 @@ async function fetchCloudAudio(text: string): Promise<string | null> {
         body: JSON.stringify({ text }),
       })
       if (res.ok) return URL.createObjectURL(await res.blob())
+      if ([401, 402, 429].includes(res.status)) {
+        cloudRestUntil = Date.now() + 15 * 60_000
+        return null
+      }
     } catch {
       /* fall through */
     }

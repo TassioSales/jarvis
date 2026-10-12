@@ -517,7 +517,7 @@ export default function App() {
       })
       store.getState().appendToLastTurn(`${scene.line} `)
 
-      const spk = createSpeaker()
+      const spk = createSpeaker({ local: true })
       speaker.current = spk
       spk.say(scene.line)
       // A voice engine that never reports the end of a sentence must not
@@ -560,7 +560,7 @@ export default function App() {
       ? reminder.text
       : `${tr('Sir, a reminder')}: ${reminder.text}`
     s.pushTurn({ id: newId(), role: 'jarvis', text: line })
-    const spk = createSpeaker()
+    const spk = createSpeaker({ local: true })
     speaker.current = spk
     spk.say(line)
     await spk.end()
