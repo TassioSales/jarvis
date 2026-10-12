@@ -36,6 +36,7 @@ import {
 import { geminiModel, geminiReady, quick } from './gemini.mjs'
 import { dueReminders } from './reminders.mjs'
 import { control, doServer, routineSteps } from './doer.mjs'
+import { mapsReady, mapsServer } from './maps.mjs'
 import { cpus, freemem, homedir, hostname, tmpdir, totalmem, uptime } from 'node:os'
 import { appendFileSync, mkdirSync, readFileSync, realpathSync, statSync, renameSync } from 'node:fs'
 import { readFile, realpath, stat } from 'node:fs/promises'
@@ -340,6 +341,9 @@ function decide(name, writes) {
     // His hands on the machine. The media keys do nothing a keyboard does not,
     // and a routine is only a list in his own file until it is run; those go ahead.
     // Everything else here opens something, and is asked about first.
+    // Maps only read.
+    if (server === 'jarvis_maps') return true
+
     if (server === 'jarvis_do') {
       return /^(media|play|now_playing|list_routines|save_routine|delete_routine)$/.test(mcpToolOf(name))
         ? true
@@ -570,7 +574,8 @@ The machine:
 - \`media\` controls what is playing: pause, play, next, previous, volume. Say
   nothing afterwards unless it failed — they asked for the music, not for a
   report on it. \`now_playing\` says what is on.
-- To put music on: find it with the Spotify connector's search, then hand the
+- To put music on: find it with the Spotify search if you have one, otherwise
+  a web search for its open.spotify.com/track link, then hand the
   \`uri\` of a TRACK to \`play\`. Only tracks and episodes start by themselves,
   so for "something by an artist", a mood or a genre, search for tracks and
   play the best match. You cannot connect, link or sign in to Spotify yourself
@@ -582,8 +587,8 @@ The machine:
   mode opens these three"). Prefer these to the shell for opening things.
 
 Getting somewhere:
-- For traffic, a route, a travel time or a place, use the maps tools (TomTom)
-  when they are connected. "How is the traffic to work" needs two addresses:
+- For traffic, a route, a travel time or a place, use \`route\` and \`find_place\`
+  (TomTom) when you have them. "How is the traffic to work" needs two addresses:
   take home and work from what you know about them; if one is missing, ask for
   it once and \`remember\` it.
 - Answer with the time it takes now and what is slowing it, in a sentence. Put
@@ -1671,6 +1676,8 @@ wss.on('connection', (socket) => {
         jarvis_memory: memoryServer(),
         // Media keys, opening things, routines.
         jarvis_do: doServer(),
+        // Traffic and travel times, when there is a TomTom key.
+        ...(mapsReady() ? { jarvis_maps: mapsServer() } : {}),
       },
       // A plain system prompt, not the claude_code preset. The preset is
       // tuned for a coding agent — verbose, file-oriented, and a large chunk
