@@ -777,6 +777,28 @@ async function localEars(audio, type) {
   }
 }
 
+/**
+ * What a transcriber says when nobody spoke.
+ *
+ * Every one of them, given silence or the hum of a room, invents something:
+ * Whisper the subtitle credits it was trained on, Gemini a timestamp or a line
+ * of its own instructions, Scribe a tag. Any of those reaching the assistant
+ * is a question nobody asked — or, if it contains his name, a false wake. The
+ * voice log of real use had one of them a hundred and thirty times.
+ */
+const PHANTOMS = [
+  /^-?$/,
+  /^[\d:.\s]+$/, // "00:00", "0:01"
+  /^[<[(].*[>\])]$/, // "<noise>", "[música]", "(risos)"
+  /assistente se chama jarvis|assistant is called jarvis/i,
+  /legendas? (pela|por|de)|amara\.org|inscreva-se|deixe (o )?seu like|subt[ií]tulos/i,
+  /^(obrigad[oa]|tchau|valeu|thank you|thanks for watching)[.!]*$/i,
+]
+function cleanHeard(text) {
+  const t = String(text ?? '').trim()
+  return PHANTOMS.some((re) => re.test(t)) ? '' : t
+}
+
 /** Until when the speech service is left alone after refusing for lack of credit. */
 let sttRestUntil = 0
 const VOICE_ID = process.env.JARVIS_VOICE_ID ?? 'JBFqnCBsd6RMkjVDRZzb'
@@ -1374,7 +1396,7 @@ const handleRequest = async (req, res) => {
       const heard = await transcribe(Buffer.concat(chunks), type)
       if (heard === null) return false
       res.writeHead(200, { ...cors, 'content-type': 'application/json' })
-      res.end(JSON.stringify({ text: heard, by: 'gemini' }))
+      res.end(JSON.stringify({ text: cleanHeard(heard), by: 'gemini' }))
       return true
     }
     // Hearing on this machine comes first: no allowance, no round trip to
@@ -1382,7 +1404,7 @@ const handleRequest = async (req, res) => {
     const local = await localEars(Buffer.concat(chunks), type)
     if (local !== null) {
       res.writeHead(200, { ...cors, 'content-type': 'application/json' })
-      return res.end(JSON.stringify({ text: local, by: 'local' }))
+      return res.end(JSON.stringify({ text: cleanHeard(local), by: 'local' }))
     }
 
     if ((!key || Date.now() < sttRestUntil) && geminiReady() && (await viaGemini())) return
@@ -1434,7 +1456,7 @@ const handleRequest = async (req, res) => {
       }
       const data = await upstream.json()
       res.writeHead(200, { ...cors, 'content-type': 'application/json' })
-      return res.end(JSON.stringify({ text: (data.text ?? '').trim() }))
+      return res.end(JSON.stringify({ text: cleanHeard(data.text) }))
     } catch (err) {
       res.writeHead(502, cors)
       return res.end(String(err?.message ?? err))

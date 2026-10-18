@@ -137,8 +137,8 @@ export async function quick(history, question, opts = {}) {
 export async function transcribe(audio, mime) {
   if (!KEY) return null
   const instruction = PT
-    ? 'Transcreva exatamente o que é dito neste áudio, em português do Brasil. Responda só com a transcrição, sem aspas nem comentários. O assistente se chama Jarvis. Se não houver fala, responda com nada.'
-    : 'Transcribe exactly what is said in this audio. Reply with the transcript only, no quotes or comments. The assistant is called Jarvis. If there is no speech, reply with nothing.'
+    ? 'Transcreva exatamente as palavras faladas neste áudio, em português do Brasil. Responda só com a transcrição, sem aspas nem comentários. Se não houver fala humana clara — silêncio, ruído, música — responda exatamente: -'
+    : 'Transcribe exactly the words spoken in this audio. Reply with the transcript only, no quotes or comments. If there is no clear human speech — silence, noise, music — reply exactly: -'
   try {
     const res = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`,
