@@ -117,6 +117,13 @@ const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]'])
 const isDevPort = (port) =>
   (port >= 5173 && port <= 5199) || (port >= 4173 && port <= 4199)
 
+/** The names this bridge answers to. Anything else is a rebound domain. */
+const hostAllowed = (host) => {
+  if (!host) return false
+  const name = host.replace(/:\d+$/, '').replace(/^\[|\]$/g, '').toLowerCase()
+  return name === 'localhost' || name === '127.0.0.1' || name === '::1'
+}
+
 function originAllowed(origin) {
   if (!origin) return ALLOW_NO_ORIGIN
   if (EXTRA_ORIGINS.has(origin.replace(/\/+$/, ''))) return true
@@ -410,6 +417,35 @@ const decideTool = (name) => decide(name, ALLOW_WRITES)
 
 /** Whether it is the kind of tool that changes something. */
 const changesThings = (name) => !decide(name, false)
+
+/**
+ * The built-in tools offered at all (after adewaskar/jarvis#27). Left to its
+ * default the SDK offers the whole Claude Code set — scheduling, subagents,
+ * notebooks, dialogs nobody can see — and their schemas were measured there at
+ * about ten thousand input tokens on every turn. A tool not offered can be
+ * neither called nor talked into being called.
+ */
+const BUILTIN_TOOLS = ALLOW_WRITES
+  ? ['Read', 'Grep', 'Glob', 'WebSearch', 'WebFetch', 'ToolSearch', 'Bash', 'Write', 'Edit']
+  : ['Read', 'Grep', 'Glob', 'WebSearch', 'WebFetch', 'ToolSearch']
+
+/** Where credentials live. Refused to every file tool and every shell command. */
+const SECRET_PATH =
+  /(^|[\\/])(\.ssh|\.gnupg|\.aws|\.azure|\.kube|\.docker|\.claude|\.config[\\/](gh|gcloud))([\\/]|$)|(^|[\\/])(\.env(\.[\w.-]*)?|\.netrc|\.git-credentials|\.npmrc|\.pypirc|\.claude\.json|id_(rsa|ed25519|ecdsa|dsa)|voiceprint\.npy)$|\.(pem|key|p12|pfx|kdbx)$/i
+const PATH_FIELDS = ['file_path', 'notebook_path', 'path']
+
+/** Why a call must not run, or null. Looks at the arguments, not just the name. */
+function secretProblem(name, input = {}) {
+  for (const k of PATH_FIELDS) {
+    if (typeof input?.[k] === 'string' && SECRET_PATH.test(input[k].trim())) return 'that file holds credentials'
+  }
+  if (name === 'Bash' && typeof input?.command === 'string') {
+    // Not a parser: any mention of a credential file in the command is enough.
+    const words = input.command.split(/[\s"'`|;&<>()]+/)
+    if (words.some((w) => w && SECRET_PATH.test(w))) return 'the command touches a file that holds credentials'
+  }
+  return null
+}
 
 /**
  * What he is about to do, in a form a person can say yes or no to.
@@ -1067,6 +1103,11 @@ function corsFor(req) {
 const http = await import('node:http')
 
 const handleRequest = async (req, res) => {
+  if (!hostAllowed(req.headers.host)) {
+    console.warn(`[jarvis] refused http request for host ${req.headers.host}`)
+    res.writeHead(421)
+    return res.end('misdirected')
+  }
   const origin = req.headers.origin
   if (origin && !originAllowed(origin)) {
     console.warn(`[jarvis] refused http request from origin ${origin}`)
@@ -1721,6 +1762,10 @@ const wss = new WebSocketServer({
   // the likeliest cause is a dev server on an unexpected port, and a silent
   // 403 would look like the bridge simply isn't running.
   verifyClient: ({ origin, req }, done) => {
+    if (!hostAllowed(req.headers.host)) {
+      console.warn(`[jarvis] rejected websocket for host ${req.headers.host}`)
+      return done(false, 421, 'Misdirected')
+    }
     const path = (req.url ?? '/').split('?')[0]
     if (path !== '/' && path !== '/ws') {
       console.warn(`[jarvis] rejected websocket on path ${path}`)
@@ -2159,6 +2204,54 @@ wss.on('connection', (socket) => {
       // along with the mail and the calendar are paid for each time he is
       // asked the time.
       disallowedTools: DISABLED_SERVERS.map((name) => `mcp__${name}`),
+      tools: BUILTIN_TOOLS,
+      // canUseTool below is not asked about everything: the CLI settles some
+      // calls itself first — a Read inside the working directory (the home
+      // folder), a shell command its classifier calls read-only, like `cat`.
+      // Measured upstream (adewaskar/jarvis#27): with a canUseTool that denied
+      // everything, `Bash: cat ~/secret.txt` still ran. A PreToolUse hook sees
+      // every call before it runs, and its deny is final — so the policy is
+      // enforced here, and canUseTool stays the second gate.
+      hooks: {
+        PreToolUse: [
+          {
+            hooks: [
+              async (hookInput) => {
+                const name = hookInput.tool_name
+                const input = hookInput.tool_input ?? {}
+                const deny = (why) => {
+                  console.log(`[jarvis] guard: ${name} denied (${why})`)
+                  return {
+                    hookSpecificOutput: {
+                      hookEventName: 'PreToolUse',
+                      permissionDecision: 'deny',
+                      permissionDecisionReason: `Not allowed: ${why}. Do not retry; say plainly it was not done.`,
+                    },
+                  }
+                }
+                if (!decideTool(name)) return deny('JARVIS is in read-only mode for this tool')
+                const secret = secretProblem(name, input)
+                if (secret) return deny(secret)
+                // The shell is consent-gated whatever its classifier thinks of
+                // the command: "only reading" a folder is still his folder.
+                if (name === 'Bash') {
+                  let agreed = false
+                  try {
+                    agreed = (await ask('confirm', describeAction(name, input), 32_000))?.ok === true
+                  } catch {
+                    agreed = false
+                  }
+                  console.log(`[jarvis] consent for Bash -> ${agreed ? 'yes' : 'no'}`)
+                  return agreed
+                    ? { hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'allow' } }
+                    : deny('the user did not approve it')
+                }
+                return {}
+              },
+            ],
+          },
+        ],
+      },
       maxTurns: 24,
       permissionMode: 'default',
       // Without this the SDK only emits whole assistant messages, and JARVIS
