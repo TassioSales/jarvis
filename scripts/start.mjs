@@ -97,6 +97,8 @@ const paint = (tag, colour) => (line) =>
     .join('\n')
 
 const children = []
+/** When each optional helper last died, to stop restarting one that cannot stay up. */
+const restarts = new Map()
 
 function run(name, command, args, colour, env, optional = false) {
   const label = paint(name, colour)
@@ -110,8 +112,21 @@ function run(name, command, args, colour, env, optional = false) {
   child.on('exit', (code) => {
     // A helper that is only an improvement — local hearing — going away
     // leaves the rest working, so it does not take them down with it.
+    // An optional helper is brought back, a few times, after a pause: it is
+    // the local ear and voice, and losing them for good to one crash would
+    // send every phrase to the cloud for the rest of the day.
     if (optional) {
-      console.log(`[${colour}m${name}[0m exited (${code}); carrying on without it.`)
+      if (stopping) return
+      const now = Date.now()
+      restarts.set(name, (restarts.get(name) ?? []).filter((t) => now - t < 10 * 60_000).concat(now))
+      if (restarts.get(name).length > 5) {
+        console.log(`[${colour}m${name}[0m exited (${code}) too often; carrying on without it.`)
+        return
+      }
+      console.log(`[${colour}m${name}[0m exited (${code}); starting it again in 5 s.`)
+      setTimeout(() => {
+        if (!stopping) run(name, command, args, colour, env, optional)
+      }, 5000)
       return
     }
     // If either half dies the other is useless, so take the whole thing down

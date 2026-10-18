@@ -822,6 +822,7 @@ const stats = {
   since: new Date().toISOString(),
   answers: { gemini: 0, claude: 0 },
   heard: { local: 0, elevenlabs: 0, gemini: 0 },
+  spoken: { cloud: 0, local: 0 },
   sttMs: [],
   voice: 'unknown',
 }
@@ -830,6 +831,9 @@ const noteStt = (by, ms) => {
   stats.sttMs.push(ms)
   if (stats.sttMs.length > 50) stats.sttMs.shift()
 }
+
+/** Until when the cloud voice is left alone after refusing for lack of credit. */
+let ttsRestUntil = 0
 
 /** Until when the speech service is left alone after refusing for lack of credit. */
 let sttRestUntil = 0
@@ -1052,6 +1056,7 @@ function corsFor(req) {
   if (origin) {
     headers['access-control-allow-origin'] = origin
     headers['access-control-allow-headers'] = 'content-type, x-voice'
+    headers['access-control-expose-headers'] = 'x-voice-by'
   }
   return headers
 }
@@ -1318,10 +1323,6 @@ const handleRequest = async (req, res) => {
 
   if (req.method === 'POST' && req.url === '/tts') {
     const key = elevenKey()
-    if (!key) {
-      res.writeHead(503, cors)
-      return res.end('no elevenlabs key')
-    }
     // A spoken line is a few hundred bytes. Anything approaching this is not a
     // sentence, and buffering it unbounded would let one request eat the heap.
     let body = ''
@@ -1351,6 +1352,35 @@ const handleRequest = async (req, res) => {
       res.writeHead(400, cors)
       return res.end('no text')
     }
+
+    // The neural voice on this machine (Kokoro, in the local helper): asked
+    // for outright for long recitals (x-voice: local), and the stand-in when
+    // the cloud voice has no key or no credit. Only when both fail does the
+    // HUD fall back to the system voice.
+    const viaLocal = async () => {
+      try {
+        const up = await fetch(`${EARS_URL}/tts`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ text }),
+          signal: AbortSignal.timeout(20_000),
+        })
+        if (!up.ok) return false
+        const wav = Buffer.from(await up.arrayBuffer())
+        stats.spoken.local++
+        res.writeHead(200, { ...cors, 'content-type': 'audio/wav', 'cache-control': 'no-cache', 'x-voice-by': 'local' })
+        res.end(wav)
+        return true
+      } catch {
+        return false
+      }
+    }
+    if ((req.headers['x-voice'] === 'local' || !key || Date.now() < ttsRestUntil) && (await viaLocal())) return
+    if (!key) {
+      res.writeHead(503, cors)
+      return res.end('no voice available')
+    }
+
     try {
       const upstream = await fetch(
         `https://api.elevenlabs.io/v1/text-to-speech/${VOICE_ID}/stream` +
@@ -1381,10 +1411,17 @@ const handleRequest = async (req, res) => {
       )
       if (!upstream.ok) {
         stats.voice = upstream.status === 401 || upstream.status === 402 ? 'no credit' : `error ${upstream.status}`
+        const why = await upstream.text()
+        // Out of credit: leave the cloud alone for a while and speak locally.
+        if ([401, 402, 429].includes(upstream.status)) {
+          ttsRestUntil = Date.now() + 15 * 60_000
+          if (await viaLocal()) return
+        }
         res.writeHead(upstream.status, cors)
-        return res.end(await upstream.text())
+        return res.end(why)
       }
       stats.voice = 'ok'
+      stats.spoken.cloud++
 
       // Pipe it through rather than buffering. Waiting for the whole file here
       // would throw away everything the streaming endpoint just bought us.
@@ -1573,7 +1610,7 @@ async function statusReport() {
       : stats.voice === 'unknown'
         ? { state: 'warn', detail: 'ainda não usada' }
         : stats.voice === 'no credit'
-          ? { state: 'down', detail: 'sem crédito · voz do sistema' }
+          ? { state: 'down', detail: 'sem crédito · usando a voz local' }
           : { state: 'down', detail: stats.voice }
   return {
     model: MODEL,
@@ -1594,6 +1631,12 @@ async function statusReport() {
         detail: voice?.enrolled ? 'cadastrada' : voice?.available ? 'não cadastrada' : 'indisponível',
       },
       { id: 'voice', label: 'Voz ElevenLabs', ...cloudVoice },
+      {
+        id: 'localvoice',
+        label: 'Voz local',
+        state: stats.spoken.local ? 'ok' : ears ? 'warn' : 'off',
+        detail: stats.spoken.local ? `Kokoro · ${stats.spoken.local} frases` : ears ? 'Kokoro · pronta' : 'indisponível',
+      },
       { id: 'maps', label: 'Mapas', state: mapsReady() ? 'ok' : 'off', detail: mapsReady() ? 'TomTom' : 'sem chave' },
       { id: 'house', label: 'Casa', state: house ? 'ok' : 'off', detail: house ? 'conectada' : 'não conectada' },
       {
@@ -1603,7 +1646,7 @@ async function statusReport() {
         detail: `${learned.habits} hábitos · ${learned.facts} fatos`,
       },
     ],
-    stats: { since: stats.since, answers: stats.answers, heard: stats.heard, sttAvg },
+    stats: { since: stats.since, answers: stats.answers, heard: stats.heard, spoken: stats.spoken, sttAvg },
   }
 }
 

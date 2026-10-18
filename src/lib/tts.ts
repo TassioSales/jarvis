@@ -64,7 +64,7 @@ const ECHO_TAIL_MS = 1800
  * indistinguishable. This tells them apart at a glance.
  */
 export const diag = {
-  engine: 'system' as 'system' | 'kokoro' | 'elevenlabs',
+  engine: 'system' as 'system' | 'kokoro' | 'elevenlabs' | 'local',
   /** Utterances handed to an engine — the OS voice or an audio element. */
   spoken: 0,
   /**
@@ -430,9 +430,11 @@ export function createSpeaker(opts: { local?: boolean } = {}): Speaker {
     // premium path automatic with no flag to set. It falls back to the browser
     // voice on any failure, so a student without a key still hears him speak.
     // `nativeBroken` latches on once the system voice has proved unusable.
-    if (opts.local && !nativeBroken) {
-      diag.engine = 'system'
-      return null
+    // Long recitals go to the neural voice on this machine (the bridge's
+    // local helper), and only if that is missing to the system voice.
+    if (opts.local) {
+      diag.engine = 'local'
+      return fetchCloudAudio(text, true).catch(() => null)
     }
     if (USE_ELEVENLABS || caps().tts || nativeBroken) {
       // Recorded at the moment the tier is chosen rather than only when the
@@ -794,13 +796,13 @@ export function createSpeaker(opts: { local?: boolean } = {}): Speaker {
 
 /** Only used when USE_ELEVENLABS is on. Bridge proxy first (it already holds
  *  the key), then a direct key, then null to fall back to the native voice. */
-async function fetchCloudAudio(text: string): Promise<string | null> {
+async function fetchCloudAudio(text: string, local = false): Promise<string | null> {
   if (Date.now() < cloudRestUntil) return null
   if (BACKEND === 'bridge') {
     try {
       const res = await fetch(`${BRIDGE_HTTP_URL}/tts`, {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: { 'content-type': 'application/json', ...(local ? { 'x-voice': 'local' } : {}) },
         body: JSON.stringify({ text }),
       })
       if (res.ok) return URL.createObjectURL(await res.blob())

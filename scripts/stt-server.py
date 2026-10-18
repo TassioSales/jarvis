@@ -200,6 +200,38 @@ def transcribe(audio: bytes, enrol=False):
         return " ".join(s.text.strip() for s in segments).strip(), complete, likeness
 
 
+# ---------------------------------------------------------------------- voice
+#
+# Kokoro (hexgrad, Apache-2.0, via kokoro-onnx): a neural voice on this
+# machine, for when the cloud voice has no credit left and for the long
+# recitals that would spend it. Loaded on first use — it is a few hundred
+# megabytes — and run on the CPU, leaving the GPU to the transcriber.
+VOICE_MODEL = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "models", "kokoro-v1.0.onnx")
+VOICE_BANK = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "models", "voices-v1.0.bin")
+LOCAL_VOICE = os.environ.get("JARVIS_LOCAL_VOICE", "pf_dora")
+kokoro = None
+voice_lock = Lock()
+
+
+def speak(text):
+    """WAV bytes of `text` in the local voice, or None when there is none."""
+    global kokoro
+    if not (os.path.exists(VOICE_MODEL) and os.path.exists(VOICE_BANK)):
+        return None
+    import soundfile as sf
+
+    with voice_lock:
+        if kokoro is None:
+            from kokoro_onnx import Kokoro
+
+            kokoro = Kokoro(VOICE_MODEL, VOICE_BANK)
+        lang = "pt-br" if LANG == "pt" else "en-us"
+        samples, rate = kokoro.create(text[:600], voice=LOCAL_VOICE, speed=1.05, lang=lang)
+    buf = io.BytesIO()
+    sf.write(buf, samples, rate, format="WAV", subtype="PCM_16")
+    return buf.getvalue()
+
+
 # --------------------------------------------------------------------- screen
 #
 # One picture of a monitor, for the bridge's look_at_screen tool. Taken only
@@ -267,6 +299,28 @@ class Handler(BaseHTTPRequestHandler):
         self.reply(404, {})
 
     def do_POST(self):
+        if self.path == "/tts":
+            size = int(self.headers.get("content-length") or 0)
+            if not 0 < size <= 64 * 1024:
+                return self.reply(400, {"error": "bad size"})
+            try:
+                text = json.loads(self.rfile.read(size)).get("text", "").strip()
+            except Exception:
+                return self.reply(400, {"error": "bad json"})
+            if not text:
+                return self.reply(400, {"error": "no text"})
+            try:
+                wav = speak(text)
+            except Exception as err:
+                return self.reply(500, {"error": str(err)})
+            if wav is None:
+                return self.reply(404, {"error": "no local voice"})
+            self.send_response(200)
+            self.send_header("content-type", "audio/wav")
+            self.send_header("content-length", str(len(wav)))
+            self.end_headers()
+            self.wfile.write(wav)
+            return
         if self.path == "/voice/finish":
             return self.reply(200, {"clips": finish_enrolment()})
         if self.path == "/voice/forget":
