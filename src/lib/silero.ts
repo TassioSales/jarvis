@@ -67,7 +67,7 @@ export async function startSilero(stream: MediaStream): Promise<Silero> {
         state,
         sr,
       })
-      .then((out) => {
+      .then((out: Record<string, ort.Tensor>) => {
         state = out.stateN as ort.Tensor
         recent.shift()
         recent.push((out.output.data as Float32Array)[0])

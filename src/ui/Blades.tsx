@@ -43,7 +43,7 @@ import * as camera from '../lib/camera'
  * changed in each place deliberately.
  */
 const DISK_PATH =
-  /^\/(Users|home|root|Volumes|Applications|System|Library|private|tmp|var|opt|mnt|media|srv|data)\//
+  /^(?:[A-Za-z]:[\\/]|\\\\|\/(?:Users|home|root|Volumes|Applications|System|Library|private|tmp|var|opt|mnt|media|srv|data)\/)/
 
 /** Route a source through the bridge, which is the only origin that can
  *  actually fetch it — and the only one the page CSP will load from. */
@@ -188,7 +188,9 @@ const Body = memo(function Body({ blade }: { blade: Blade }) {
         // reaches the room the user is sitting in is granted.
         sandbox="allow-scripts allow-same-origin allow-presentation"
         allow="accelerometer; encrypted-media; picture-in-picture; fullscreen"
-        referrerPolicy="no-referrer"
+        // The player needs to know who embeds it, or YouTube shows "Error
+        // 153". The origin only, never the path (adewaskar/jarvis#30).
+        referrerPolicy="strict-origin-when-cross-origin"
         allowFullScreen
         title={blade.title}
       />

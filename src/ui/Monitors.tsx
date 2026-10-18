@@ -6,7 +6,8 @@ import { sky } from '../lib/weather'
 import { proxied } from '../lib/briefing'
 import { BarChart, LineChart } from './charts'
 import { SkyIcon } from './glyphs'
-import { bytes, Dot, Frame, Ring, Segments, Spark, SunArc, Ticker, type Lamp } from './hx'
+import { Dot, Frame, Ring, Segments, Spark, SunArc, Ticker, type Lamp } from './hx'
+import { bytes } from './format'
 import './monitors.css'
 
 /**

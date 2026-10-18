@@ -19,7 +19,7 @@ import { BRIDGE_HTTP_URL } from '../config'
  * assets; `/Users/you/shot.png` is a screenshot JARVIS just took.
  */
 const DISK_PATH =
-  /^\/(Users|home|root|Volumes|Applications|System|Library|private|tmp|var|opt|mnt|media|srv|data)\//
+  /^(?:[A-Za-z]:[\\/]|\\\\|\/(?:Users|home|root|Volumes|Applications|System|Library|private|tmp|var|opt|mnt|media|srv|data)\/)/
 
 /**
  * Every media URL is rewritten to point at the bridge. Two destinations, for
@@ -155,8 +155,13 @@ const EMBED_FEATURES = new Set([
  * several clips on it from pulling megabytes nobody asked for.
  */
 function hardenMedia(root: Element) {
-  root.querySelectorAll('img, video, iframe').forEach((el) => {
+  root.querySelectorAll('img, video').forEach((el) => {
     el.setAttribute('referrerpolicy', 'no-referrer')
+  })
+  // Only the allowlisted players are left as iframes by now, and they need the
+  // origin to agree to play (adewaskar/jarvis#30).
+  root.querySelectorAll('iframe').forEach((el) => {
+    el.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin')
   })
 
   root.querySelectorAll('video').forEach((video) => {

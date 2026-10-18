@@ -66,19 +66,14 @@ export async function holdCamera(): Promise<HTMLVideoElement> {
   if (video && stream) return video
 
   try {
-    stream = await navigator.mediaDevices.getUserMedia({
-      video: { width: 1280, height: 720, facingMode: 'user' },
+    // Shared, so two holders arriving together — the face lock and a look —
+    // wait on one getUserMedia instead of each opening a stream. The second
+    // used to overwrite the first, which was then never stopped, and the
+    // light stayed on after everyone had let go (adewaskar/jarvis#31).
+    opening ??= openCamera().finally(() => {
+      opening = null
     })
-    const el = document.createElement('video')
-    el.autoplay = true
-    el.playsInline = true
-    el.muted = true
-    el.srcObject = stream
-    await el.play()
-    video = el
-    diag.open = true
-    diag.lastError = ''
-    return el
+    return await opening
   } catch (err) {
     // The hold is given back on failure, or the count drifts up for ever and
     // the camera can never be closed.
@@ -87,6 +82,52 @@ export async function holdCamera(): Promise<HTMLVideoElement> {
     diag.lastError = String((err as Error)?.message ?? err)
     throw err
   }
+}
+
+let opening: Promise<HTMLVideoElement> | null = null
+
+async function openCamera(): Promise<HTMLVideoElement> {
+  const s = await navigator.mediaDevices.getUserMedia({
+    video: { width: 1280, height: 720, facingMode: 'user' },
+  })
+  try {
+    const el = document.createElement('video')
+    el.autoplay = true
+    el.playsInline = true
+    el.muted = true
+    el.srcObject = s
+    await el.play()
+    await firstFrame(el)
+    if (holders === 0) throw new Error('the camera was released before it opened')
+    stream = s
+    video = el
+    diag.open = true
+    diag.lastError = ''
+    return el
+  } catch (err) {
+    // A stream that never became ours must still be stopped, or the light stays on.
+    s.getTracks().forEach((t) => t.stop())
+    throw err
+  }
+}
+
+/**
+ * Wait until a frame has actually been decoded.
+ *
+ * play() resolves when playback starts and videoWidth is known from the
+ * metadata — both before a real webcam has delivered a picture. Drawing in
+ * that gap copies an unpainted surface: a valid, entirely black JPEG, which is
+ * what the face lock was comparing against (adewaskar/jarvis#19, #31).
+ * Capped, so a camera that never paints cannot hang the turn.
+ */
+function firstFrame(el: HTMLVideoElement, timeoutMs = 2000): Promise<void> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(resolve, timeoutMs)
+    el.requestVideoFrameCallback?.(() => {
+      clearTimeout(timer)
+      resolve()
+    })
+  })
 }
 
 /** Give back a hold. The camera light goes out when the last one does. */

@@ -36,6 +36,8 @@ type Frame = {
   when?: string
   /** On a `reminder` frame: run the briefing instead of saying the text. */
   briefing?: boolean
+  /** On a `reminder` frame: habit offered to carry out. */
+  offer?: string
   /** On a `confirm` frame: what he wants to do, and to what. */
   tool?: string
   detail?: string

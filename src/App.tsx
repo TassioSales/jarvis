@@ -1105,7 +1105,6 @@ export default function App() {
     await new Promise((r) => setTimeout(r, 9200)) // boot sequence
     await warming
     store.getState().setConnected(connectedLabels())
-    store.getState().setVoice(currentVoiceName())
 
     // The analyser is what makes the reactor pulse with your voice. It needs a
     // getUserMedia stream; speech recognition does not, and gets its own. So a
@@ -1124,6 +1123,7 @@ export default function App() {
     // first turn already uses ElevenLabs when a key is present and the browser
     // fallback when it is not — no flag, no reload.
     await probeCapabilities()
+    store.getState().setVoice(currentVoiceName())
 
     // One voice loop, started once, running until the page closes.
     voice.current = await startVoice({
