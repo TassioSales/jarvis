@@ -122,6 +122,11 @@ const PT: Record<string, string> = {
   unhealthy: 'ruim',
   'and the months ahead': 'e os próximos meses',
   REMINDERS: 'LEMBRETES',
+  AGENDA: 'AGENDA',
+  ahead: 'pela frente',
+  'all day': 'dia todo',
+  NOW: 'AGORA',
+  'Nothing on the calendar until tomorrow night.': 'Nada na agenda até amanhã à noite.',
   daily: 'todo dia',
   NOTES: 'NOTAS',
   'Nothing due. Say: "Wednesday, remind me at six to call João".':

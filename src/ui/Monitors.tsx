@@ -47,6 +47,7 @@ type Today = {
   playing: { app: string; status: string; artist: string; title: string } | null
   commute: { from: string; to: string; minutes: number; km: number; delay: number; usual: number | null; toWork: boolean } | null
   commuteSet: boolean
+  agenda?: { configured: boolean; events: { title: string; start: string; end: string; allDay: boolean; location: string }[]; error?: string | null }
 }
 type Headline = { title: string; source: string; at: string; outlets?: string[] }
 type Story = { topic: string; title: string; source: string; image: string | null; at: string }
@@ -142,6 +143,14 @@ function aqiBand(aqi: number): { label: string; lamp: Lamp } {
 }
 
 /** A hint of what to say, where a card has nothing yet. */
+/** Calendar events still ahead (or under way), today and tomorrow. */
+function upcoming(today: Today, now: Date) {
+  const end = new Date(now)
+  end.setDate(end.getDate() + 2)
+  end.setHours(0, 0, 0, 0)
+  return (today.agenda?.events ?? []).filter((e) => new Date(e.end) > now && new Date(e.start) < end)
+}
+
 const Hint = ({ children }: { children: React.ReactNode }) => (
   <div className="hx-empty">
     <span className="hx-radar" aria-hidden>
@@ -314,8 +323,34 @@ export function DayView() {
         )}
       </Frame>
 
-      <Frame className="hx-due" code="07" title={t('REMINDERS')} aside={today?.reminders.length ? String(today.reminders.length) : undefined}>
-        {today?.reminders.length ? (
+      <Frame
+        className="hx-due"
+        code="07"
+        title={today?.agenda?.configured ? t('AGENDA') : t('REMINDERS')}
+        aside={today?.agenda?.configured ? `${upcoming(today, now).length} ${t('ahead')}` : today?.reminders.length ? String(today.reminders.length) : undefined}
+      >
+        {today?.agenda?.configured && upcoming(today, now).length ? (
+          <ol className="hx-list hx-agenda">
+            {upcoming(today, now).slice(0, 6).map((e) => {
+              const start = new Date(e.start)
+              const live = !e.allDay && start <= now && new Date(e.end) > now
+              const soon = !e.allDay && start > now && start.getTime() - now.getTime() < 60 * 60_000
+              return (
+                <li key={e.title + e.start} className={live ? 'is-live' : soon ? 'is-soon' : ''}>
+                  <b>
+                    {start.toDateString() === now.toDateString() ? '' : `${t('tomorrow')} `}
+                    {e.allDay ? t('all day') : start.toLocaleTimeString(LANG, { hour: '2-digit', minute: '2-digit' })}
+                  </b>
+                  <span>
+                    {e.title}
+                    {e.location && <small> · {e.location}</small>}
+                    {live && <small className="hx-tag"> {t('NOW')}</small>}
+                  </span>
+                </li>
+              )
+            })}
+          </ol>
+        ) : today?.reminders.length ? (
           <ol className="hx-list">
             {today.reminders.map((r, i) => (
               <li key={i}>
@@ -325,7 +360,11 @@ export function DayView() {
             ))}
           </ol>
         ) : (
-          <Hint>{t('Nothing due. Say: "Wednesday, remind me at six to call João".')}</Hint>
+          <Hint>
+            {today?.agenda?.configured
+              ? t('Nothing on the calendar until tomorrow night.')
+              : t('Nothing due. Say: "Wednesday, remind me at six to call João".')}
+          </Hint>
         )}
         {today?.notes.length ? (
           <div className="hx-notes">

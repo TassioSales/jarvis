@@ -1,0 +1,13 @@
+# The local helper (scripts/stt-server.py): hearing, end of turn, whose voice,
+# the local voice and screenshots. Installed by `npm run setup:local`.
+faster-whisper
+nvidia-cublas-cu12
+nvidia-cudnn-cu12==9.*
+# faster-whisper 1.2 passes an argument PyAV 16 removed.
+av<16
+onnxruntime
+sherpa-onnx
+kokoro-onnx
+soundfile
+mss
+pillow

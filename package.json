@@ -17,7 +17,9 @@
     "bridge": "node bridge/server.mjs",
     "bridge:writes": "JARVIS_ALLOW_WRITES=1 node bridge/server.mjs",
     "setup": "node scripts/setup.mjs",
-    "test:voice": "node scripts/voice-test.mjs"
+    "test:voice": "node scripts/voice-test.mjs",
+    "doctor": "node scripts/doctor.mjs",
+    "setup:local": "node scripts/setup-local.mjs"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.3.220",
@@ -32,6 +34,7 @@
     "dompurify": "^3.4.12",
     "framer-motion": "^12.43.0",
     "kokoro-js": "^1.2.1",
+    "node-ical": "^0.27.3",
     "onnxruntime-web": "1.22.0-dev.20250409-89f8206ba4",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",

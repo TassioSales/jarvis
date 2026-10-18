@@ -361,6 +361,17 @@
 .hx-list-tight li {
   font-size: clamp(10px, 1.3vmin, 14.5px);
 }
+.hx-agenda li.is-soon b {
+  color: var(--lamp-warn);
+}
+.hx-agenda li.is-live b {
+  color: var(--lamp-ok);
+}
+.hx-tag {
+  font-family: var(--mono);
+  color: var(--lamp-ok) !important;
+  letter-spacing: 0.2em;
+}
 .hx-fact b {
   color: var(--lamp-ok) !important;
 }

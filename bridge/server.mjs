@@ -37,6 +37,8 @@ import {
 import { transcribe, geminiModel, geminiReady, quick } from './gemini.mjs'
 import { dueReminders, listReminders } from './reminders.mjs'
 import { system } from './system.mjs'
+import { agenda, agendaNote, agendaReady } from './agenda.mjs'
+import { dueAlert } from './watch.mjs'
 import { control, doServer, mediaSession, routineSteps } from './doer.mjs'
 import { mapsReady, mapsServer, routeSummary } from './maps.mjs'
 import { dueOffer, habits, habitsNote, learnFromConversation, learnServer, recordAction } from './learn.mjs'
@@ -1610,7 +1612,7 @@ async function statusReport() {
       : stats.voice === 'unknown'
         ? { state: 'warn', detail: 'ainda não usada' }
         : stats.voice === 'no credit'
-          ? { state: 'down', detail: 'sem crédito · usando a voz local' }
+          ? { state: 'warn', detail: 'sem crédito · usando a voz local' }
           : { state: 'down', detail: stats.voice }
   return {
     model: MODEL,
@@ -1638,6 +1640,7 @@ async function statusReport() {
         detail: stats.spoken.local ? `Kokoro · ${stats.spoken.local} frases` : ears ? 'Kokoro · pronta' : 'indisponível',
       },
       { id: 'maps', label: 'Mapas', state: mapsReady() ? 'ok' : 'off', detail: mapsReady() ? 'TomTom' : 'sem chave' },
+      { id: 'calendar', label: 'Agenda', state: agendaReady() ? 'ok' : 'off', detail: agendaReady() ? 'Google Agenda · iCal' : 'sem link iCal' },
       { id: 'house', label: 'Casa', state: house ? 'ok' : 'off', detail: house ? 'conectada' : 'não conectada' },
       {
         id: 'learn',
@@ -1696,6 +1699,7 @@ async function todayReport() {
     playing: playing.value,
     commute: commute.value,
     commuteSet: Boolean(home && work),
+    agenda: await agenda().catch(() => ({ configured: agendaReady(), events: [] })),
   }
 }
 
@@ -1807,6 +1811,12 @@ const RESULT_FAILURES = {
  * reminder lost, whereas one left in the file is said the moment he is next
  * started.
  */
+let lastAlertCheck = 0
+// The calendar, kept warm so the prompts and the watcher have it without waiting.
+if (agendaReady()) {
+  void agenda()
+  setInterval(() => void agenda(), 10 * 60_000).unref()
+}
 setInterval(() => {
   const open = [...wss.clients].filter((c) => c.readyState === c.OPEN)
   if (!open.length) return
@@ -1816,6 +1826,21 @@ setInterval(() => {
       client.send(JSON.stringify({ type: 'reminder', text: r.text, briefing: r.briefing }))
     }
   }
+  // Something worth saying unasked: rain on its way, a meeting in fifteen
+  // minutes, a hot graphics card (watch.mjs). Checked once a minute.
+  if (Date.now() - lastAlertCheck >= 60_000) {
+    lastAlertCheck = Date.now()
+    dueAlert()
+      .then((text) => {
+        if (!text) return
+        console.log(`[jarvis] alert: ${text}`)
+        for (const client of [...wss.clients].filter((c) => c.readyState === c.OPEN)) {
+          client.send(JSON.stringify({ type: 'reminder', text, briefing: false }))
+        }
+      })
+      .catch(() => {})
+  }
+
   // A habit whose hour has come: offered like a reminder, with what to do if
   // the answer is yes.
   const offer = dueOffer()
@@ -2097,7 +2122,7 @@ wss.on('connection', (socket) => {
       // keeps answers short enough to speak, and cuts cost per turn.
       // Read per session, so a fact learned in one conversation is known in the
       // next without restarting the bridge.
-      systemPrompt: SYSTEM_PROMPT + LANGUAGE_NOTE + worldNote() + memoryNote() + habitsNote(),
+      systemPrompt: SYSTEM_PROMPT + LANGUAGE_NOTE + worldNote() + memoryNote() + habitsNote() + agendaNote(),
       // Run from the home directory so project-scoped MCP servers don't shadow
       // the global ones, and so file tools have a sane root.
       cwd: homedir(),
@@ -2266,7 +2291,7 @@ wss.on('connection', (socket) => {
             let understudy = null
             if (!priming && !lastForDisplay && lastQuestion && geminiReady() && claudeFailed(msg)) {
               console.warn(`[jarvis] Claude could not answer (${msg.subtype}); the small model is standing in`)
-              const answer = await quick(recent, lastQuestion, { standIn: true, notes: worldNote() + memoryNote() })
+              const answer = await quick(recent, lastQuestion, { standIn: true, notes: worldNote() + memoryNote() + agendaNote() })
               if (!answer.escalate) understudy = answer.text
             }
 
@@ -2369,7 +2394,7 @@ wss.on('connection', (socket) => {
         if (geminiReady() && !forDisplay) {
           quickAbort = new AbortController()
           const { signal } = quickAbort
-          const answer = await quick(recent, text, { notes: worldNote() + memoryNote(), signal })
+          const answer = await quick(recent, text, { notes: worldNote() + memoryNote() + agendaNote(), signal })
           quickAbort = null
           // Interrupted while it was thinking: the user has moved on, and so
           // has the client. Say nothing.
