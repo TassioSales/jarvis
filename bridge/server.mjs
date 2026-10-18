@@ -149,6 +149,27 @@ function originAllowed(origin) {
 const ALLOW_WRITES = process.env.JARVIS_ALLOW_WRITES === '1'
 
 /**
+ * Whole capabilities left out (after adewaskar/jarvis#35):
+ * JARVIS_DISABLE=browser,camera,interface. A server not created is a set of
+ * tool schemas not sent on every turn — measured upstream at about 3,100
+ * (browser), 1,400 (camera) and 4,800 (interface) input tokens — and a thing
+ * the model cannot be talked into doing.
+ */
+const DISABLED = new Set(
+  (process.env.JARVIS_DISABLE ?? '')
+    .split(',')
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean),
+)
+const DISABLED_NOTE = DISABLED.size
+  ? `
+
+NOT AVAILABLE in this session, whatever the instructions above say: ${[...DISABLED]
+      .map((d) => ({ browser: 'the Chrome browser tools', camera: 'the camera and the screen', interface: 'the interface controls' })[d] ?? d)
+      .join(', ')}. If asked for one, say in one sentence that it is switched off.`
+  : ''
+
+/**
  * The orchestrator model. Override with JARVIS_MODEL to trade quality for pace
  * — claude-sonnet-5 is noticeably snappier on camera if Opus feels slow.
  */
@@ -2145,13 +2166,13 @@ wss.on('connection', (socket) => {
         // MCP tool names are `mcp__<key>__<tool>` and one key can only carry
         // one server; the underscore in it is why decideTool and announceTool
         // both name `jarvis_ui` explicitly.
-        jarvis_ui: uiServer((op, args) => send({ type: 'ui', op, args })),
+        ...(DISABLED.has('interface') ? {} : { jarvis_ui: uiServer((op, args) => send({ type: 'ui', op, args })) }),
         // The user's own Chrome, over the extension's native-host socket. It
         // holds no per-connection state, but it is built here with the rest so
         // the write gate is read once, at the same point as everything else.
-        jarvis_chrome: chromeServer({ allowWrites: ALLOW_WRITES }),
+        ...(DISABLED.has('browser') ? {} : { jarvis_chrome: chromeServer({ allowWrites: ALLOW_WRITES }) }),
         // The camera, which unlike everything else here has to ask and wait.
-        jarvis_eyes: visionServer(ask),
+        ...(DISABLED.has('camera') ? {} : { jarvis_eyes: visionServer(ask) }),
         // What he was told in earlier sessions, and the means to add to it.
         jarvis_memory: memoryServer(),
         // Media keys, opening things, routines.
@@ -2167,7 +2188,7 @@ wss.on('connection', (socket) => {
       // keeps answers short enough to speak, and cuts cost per turn.
       // Read per session, so a fact learned in one conversation is known in the
       // next without restarting the bridge.
-      systemPrompt: SYSTEM_PROMPT + LANGUAGE_NOTE + worldNote() + memoryNote() + habitsNote() + agendaNote(),
+      systemPrompt: SYSTEM_PROMPT + LANGUAGE_NOTE + DISABLED_NOTE + worldNote() + memoryNote() + habitsNote() + agendaNote(),
       // Run from the home directory so project-scoped MCP servers don't shadow
       // the global ones, and so file tools have a sane root.
       cwd: homedir(),
