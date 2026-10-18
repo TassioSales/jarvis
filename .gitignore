@@ -29,3 +29,4 @@ public/mediapipe/
 public/faceapi/
 .venv-stt/
 __pycache__/
+models/
