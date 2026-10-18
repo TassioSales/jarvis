@@ -1,4 +1,5 @@
 import { getMic } from './audio'
+import { startSilero, type Silero } from './silero'
 
 /**
  * Voice-activity detection and segment capture.
@@ -100,6 +101,17 @@ const MAX_MS = 20000
 /** The loudest the room is ever assumed to be. Ordinary speech at a desk
  *  microphone measures several times this. */
 const FLOOR_MAX = 0.01
+
+/** The voice detector's probability above which a frame is speech... */
+const VOICE_ON = 0.5
+/** ...above which it is certainly speech, enough to start on a quiet voice... */
+const VOICE_SURE = 0.85
+/** ...and below which it is certainly not, so the room's level may be learned. */
+const VOICE_OFF = 0.3
+/** How quiet a voice the detector may start on: this fraction of TRIGGER_MIN. */
+const QUIET_RATIO = 0.45
+/** How long a loud sound that is not a voice is recorded before giving up. */
+const NOT_VOICE_GIVEUP_MS = 900
 const FLOOR_UP = 0.0008
 const FLOOR_DOWN = 0.02
 
@@ -147,6 +159,18 @@ export async function startVad(h: VadHandlers): Promise<Vad> {
   analyser.smoothingTimeConstant = 0.35
   source.connect(analyser)
   const buf = new Float32Array(analyser.fftSize)
+
+  // The voice detector (silero.ts), when it loads. Until then, and if it never
+  // does, everything below runs on loudness alone, as it always has.
+  let voice: Silero | null = null
+  startSilero(stream)
+    .then((v) => {
+      if (stopped) v.stop()
+      else voice = v
+    })
+    .catch((err) => console.warn('[jarvis] voice detector unavailable, using loudness only:', err))
+  /** Highest speech probability seen since the onset now being confirmed. */
+  let armedVoice = 0
 
   let stopped = false
   let guard = false
@@ -234,8 +258,10 @@ export async function startVad(h: VadHandlers): Promise<Vad> {
     smoothEnergy += (energy - smoothEnergy) * 0.5
     h.onLevel(Math.min(1, smoothEnergy * 12))
 
+    const p = voice ? voice.prob() : -1
+
     // Adapt the floor only when we are confident this is not speech.
-    if (!speaking && armedAt === 0) {
+    if (!speaking && armedAt === 0 && p < VOICE_OFF) {
       const rate = smoothEnergy > floor ? FLOOR_UP : FLOOR_DOWN
       floor += (smoothEnergy - floor) * rate
       // Bounded above as well as below. The floor is meant to follow the room,
@@ -253,13 +279,26 @@ export async function startVad(h: VadHandlers): Promise<Vad> {
     const now = performance.now()
 
     if (!speaking) {
-      if (smoothEnergy > threshold) {
+      // Loud enough — or, when the voice detector is sure it is a voice, merely
+      // audible: someone speaking softly is still someone speaking.
+      const onset = smoothEnergy > threshold || (p >= VOICE_SURE && smoothEnergy > TRIGGER_MIN * QUIET_RATIO && !guard)
+      if (onset) {
+        if (armedAt !== 0) armedVoice = Math.max(armedVoice, p)
         if (armedAt === 0) {
+          armedVoice = Math.max(0, p)
           // Onset: start recording immediately so the first phoneme is captured,
           // before we have even confirmed this is speech. If it turns out to be
           // a blip, the recorder is discarded and nothing was lost.
           armedAt = now
           startRecorder()
+        } else if (now - armedAt >= START_MS && voice && armedVoice < VOICE_ON) {
+          // Loud, but not a voice: a door, a fan, music. Keep waiting while
+          // it lasts in case a voice joins; give up if it never does.
+          if (now - armedAt >= START_MS + NOT_VOICE_GIVEUP_MS) {
+            armedAt = 0
+            armedVoice = 0
+            discardRecorder()
+          }
         } else if (now - armedAt >= START_MS) {
           // Confirmed. This is the moment barge-in fires.
           speaking = true
@@ -273,10 +312,13 @@ export async function startVad(h: VadHandlers): Promise<Vad> {
       } else if (armedAt !== 0) {
         // Rose and fell without confirming — a knock, a click, a lip smack.
         armedAt = 0
+        armedVoice = 0
         discardRecorder()
       }
     } else {
-      if (smoothEnergy > release) {
+      // Still talking if it is loud, or if it is quiet but plainly a voice —
+      // the soft end of a sentence is not the end of it.
+      if (smoothEnergy > release || p >= VOICE_ON) {
         lastLoud = now
         voicedMs += Math.min(100, now - lastTick)
       }
@@ -297,6 +339,7 @@ export async function startVad(h: VadHandlers): Promise<Vad> {
     stop: () => {
       stopped = true
       cancelAnimationFrame(raf)
+      voice?.stop()
       discardRecorder()
       try {
         source.disconnect()

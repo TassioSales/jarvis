@@ -779,7 +779,7 @@ async function localEars(audio, type) {
     if (!res.ok) throw new Error(`http ${res.status}`)
     const data = await res.json()
     earsSeen = true
-    return String(data.text ?? '').trim()
+    return { text: String(data.text ?? '').trim(), complete: typeof data.complete === 'number' ? data.complete : null }
   } catch {
     earsDownUntil = Date.now() + 30_000
     return null
@@ -1413,7 +1413,8 @@ const handleRequest = async (req, res) => {
     const local = await localEars(Buffer.concat(chunks), type)
     if (local !== null) {
       res.writeHead(200, { ...cors, 'content-type': 'application/json' })
-      return res.end(JSON.stringify({ text: cleanHeard(local), by: 'local' }))
+      // `complete`: how sure the end-of-turn model is that they had finished.
+      return res.end(JSON.stringify({ text: cleanHeard(local.text), complete: local.complete, by: 'local' }))
     }
 
     if ((!key || Date.now() < sttRestUntil) && geminiReady() && (await viaGemini())) return

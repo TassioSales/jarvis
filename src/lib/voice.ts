@@ -190,6 +190,14 @@ const SETTLE_MS = 180
 /** ...and this long when the sentence is plainly unfinished. */
 const CONTINUE_MS = 1600
 /**
+ * Below this, the end-of-turn model (Smart Turn, run by the local
+ * transcriber) is sure they had not finished — a breath in the middle of
+ * "me lembra de… ligar pro João". Used only to wait longer, never to cut
+ * anyone off sooner: in testing it was reliable about pauses and unreliable
+ * about speech chopped mid-word.
+ */
+const UNFINISHED = 0.3
+/**
  * Nothing is held longer than this in total. A ceiling rather than a timer:
  * without it, someone who ends every clause on "and" could hold a turn open
  * for ever, and the assistant would look like it had stopped listening.
@@ -214,8 +222,9 @@ function holdFor(text: string): number {
 }
 
 type Assembler = {
-  /** Add a transcript. `active` is true if the user is audibly still going. */
-  feed: (text: string, active: boolean) => void
+  /** Add a transcript. `active` is true if the user is audibly still going;
+   *  `complete` is the end-of-turn model's verdict, when there is one. */
+  feed: (text: string, active: boolean, complete?: number | null) => void
   /** Send whatever is held right now, if anything. */
   flush: () => void
   /** Throw away whatever is held — used when he stands down. */
@@ -245,7 +254,7 @@ function makeAssembler(h: {
   }
 
   return {
-    feed(text, active) {
+    feed(text, active, complete) {
       if (!text.trim()) return
       held = `${held} ${text}`.replace(/\s+/g, ' ').trim()
       if (!firstAt) firstAt = Date.now()
@@ -262,8 +271,9 @@ function makeAssembler(h: {
         return
       }
 
+      const unfinished = typeof complete === 'number' && complete < UNFINISHED
       const wait = Math.min(
-        holdFor(held),
+        unfinished ? Math.max(holdFor(held), CONTINUE_MS) : holdFor(held),
         Math.max(0, MAX_HOLD_MS - (Date.now() - firstAt)),
       )
       diag.waitedMs = wait
@@ -596,7 +606,7 @@ async function startElevenVoice(h: VoiceHandlers): Promise<Voice> {
         drop(`transcription failed (${res.status})`)
         return
       }
-      const { text } = (await res.json()) as { text?: string }
+      const { text, complete } = (await res.json()) as { text?: string; complete?: number | null }
       // The transcriber annotates what is not speech — "[ruído]", "(música)",
       // "[risos]". Those are a description of the room, not something anyone
       // said, and one of them reached the model as a question.
@@ -617,7 +627,7 @@ async function startElevenVoice(h: VoiceHandlers): Promise<Voice> {
 
       diag.heard = said
       diag.heardAt = Date.now()
-      voiceLog('heard', { mode, text: said, sttMs: diag.idleMs })
+      voiceLog('heard', { mode, text: said, sttMs: diag.idleMs, ...(typeof complete === 'number' ? { complete } : {}) })
 
       if (mode === 'wake') {
         if (WAKE.test(said) && Date.now() - lastWake > WAKE_DEBOUNCE) {
@@ -642,7 +652,7 @@ async function startElevenVoice(h: VoiceHandlers): Promise<Voice> {
 
       // Not a turn yet — a piece of one. The assembler decides when the thought
       // is finished, reading the words and whether the room is still noisy.
-      assemble.feed(said, vad?.meter().speaking ?? false)
+      assemble.feed(said, vad?.meter().speaking ?? false, complete)
     } catch (err) {
       diag.restarts++
       diag.lastError = String(err)

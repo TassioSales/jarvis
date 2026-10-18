@@ -39,7 +39,8 @@ def add_cuda_dlls():
 
 add_cuda_dlls()
 
-from faster_whisper import WhisperModel  # noqa: E402
+from faster_whisper import WhisperModel, decode_audio  # noqa: E402
+from faster_whisper.feature_extractor import FeatureExtractor  # noqa: E402
 
 MODEL = os.environ.get("JARVIS_STT_MODEL", "medium")
 DEVICE = os.environ.get("JARVIS_STT_DEVICE", "cuda")
@@ -63,17 +64,59 @@ model, device = load()
 # One clip at a time: the GPU does not get faster by being asked twice.
 lock = Lock()
 
+# ---------------------------------------------------------------- end of turn
+#
+# Smart Turn v3 (pipecat-ai/smart-turn, BSD-2): from the sound of the last
+# eight seconds — intonation, pace, the shape of the final syllable — the
+# probability that the speaker has finished. A transcript can only guess that
+# from punctuation, and Whisper puts a full stop on nearly everything.
+# Optional: without models/smart-turn-v3.2-cpu.onnx this part is skipped.
+TURN_MODEL = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "models", "smart-turn-v3.2-cpu.onnx")
+turn_session = None
+if os.path.exists(TURN_MODEL):
+    try:
+        import numpy as np
+        import onnxruntime as ort
 
-def transcribe(audio: bytes) -> str:
+        _opts = ort.SessionOptions()
+        _opts.inter_op_num_threads = 1
+        _opts.intra_op_num_threads = 2
+        turn_session = ort.InferenceSession(TURN_MODEL, sess_options=_opts, providers=["CPUExecutionProvider"])
+        turn_features = FeatureExtractor(feature_size=80, chunk_length=8)
+    except Exception as err:
+        print(f"[stt] end-of-turn model unavailable: {err}", flush=True)
+        turn_session = None
+
+
+def turn_complete(samples):
+    """Probability, 0 to 1, that the speech in `samples` (16 kHz) is a finished turn."""
+    if turn_session is None or samples is None or len(samples) < 1600:
+        return None
+    n = 8 * 16000
+    # As the reference does it: the last eight seconds, padded with silence at
+    # the START — the model reads the end of the window as the end of speech —
+    # then normalised as Whisper's extractor does with do_normalize.
+    audio = samples[-n:].astype(np.float32)
+    audio = np.pad(audio, (n - len(audio), 0))
+    audio = (audio - audio.mean()) / np.sqrt(audio.var() + 1e-7)
+    feats = turn_features(audio, padding=0)[:, :800].astype(np.float32)
+    out = turn_session.run(None, {"input_features": feats[np.newaxis]})
+    return float(out[0][0][0])
+
+
+def transcribe(audio: bytes):
+    """The words, and the probability the speaker had finished (or None)."""
+    samples = decode_audio(io.BytesIO(audio), sampling_rate=16000)
+    complete = turn_complete(samples)
     with lock:
         segments, _ = model.transcribe(
-            io.BytesIO(audio),
+            samples,
             language=LANG,
             beam_size=1,
             vad_filter=True,
             condition_on_previous_text=False,
         )
-        return " ".join(s.text.strip() for s in segments).strip()
+        return " ".join(s.text.strip() for s in segments).strip(), complete
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -102,10 +145,13 @@ class Handler(BaseHTTPRequestHandler):
         audio = self.rfile.read(size)
         started = time.perf_counter()
         try:
-            text = transcribe(audio)
+            text, complete = transcribe(audio)
         except Exception as err:
             return self.reply(500, {"error": str(err)})
-        self.reply(200, {"text": text, "ms": round((time.perf_counter() - started) * 1000)})
+        body = {"text": text, "ms": round((time.perf_counter() - started) * 1000)}
+        if complete is not None:
+            body["complete"] = round(complete, 3)
+        self.reply(200, body)
 
 
 def watch_parent():
@@ -152,5 +198,10 @@ if __name__ == "__main__":
         list(model.transcribe(numpy.zeros(16000, dtype="float32"), language=LANG)[0])
     except Exception:
         pass
-    print(f"[stt] faster-whisper {MODEL} on {device}, listening on 127.0.0.1:{PORT}", flush=True)
+    print(
+        f"[stt] faster-whisper {MODEL} on {device}"
+        + (", with end-of-turn detection" if turn_session else "")
+        + f", listening on 127.0.0.1:{PORT}",
+        flush=True,
+    )
     ThreadingHTTPServer(("127.0.0.1", PORT), Handler).serve_forever()
