@@ -1,3 +1,4 @@
+import net from 'node:net'
 /**
  * JARVIS local bridge.
  *
@@ -1392,7 +1393,28 @@ const wss = new WebSocketServer({
     done(true)
   },
 })
-server.listen(PORT)
+// Loopback only. Left to its default, listen() takes every interface, and
+// anyone on the same Wi-Fi could open a socket here: the origin check is a
+// header a script sets to whatever it likes, and with writes on, a socket
+// that can ask can also answer its own consent card.
+//
+// "localhost" is two addresses, and a browser may pick either, so the IPv6
+// one is a plain relay onto the IPv4 one — the HUD's URLs, and the origin it
+// checks, stay exactly as they were.
+server.listen(PORT, '127.0.0.1')
+net
+  .createServer((client) => {
+    const upstream = net.connect(PORT, '127.0.0.1')
+    client.pipe(upstream).pipe(client)
+    const close = () => {
+      client.destroy()
+      upstream.destroy()
+    }
+    client.on('error', close)
+    upstream.on('error', close)
+  })
+  .on('error', (err) => console.warn('[jarvis] IPv6 loopback unavailable:', err.code ?? err.message))
+  .listen(PORT, '::1')
 
 console.log(`[jarvis] bridge listening on ws://localhost:${PORT}`)
 console.log(
@@ -1722,6 +1744,10 @@ wss.on('connection', (socket) => {
       // The cost is that MCP servers stop being discovered too, which is why
       // mcpServers above passes them in by hand.
       settingSources: [],
+      // Nothing written to ~/.claude/projects. A voice session is never resumed,
+      // and a transcript of one holds whatever he read aloud: mail, the
+      // calendar, frames from the camera.
+      persistSession: false,
       // Stated explicitly, and it has to be.
       //
       // With no `model` here the SDK falls back to its own default, which on
