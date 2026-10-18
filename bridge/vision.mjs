@@ -70,16 +70,57 @@ than listing them. The user knows what their own hands look like.`
  * @param {(kind: string, args: object) => Promise<object>} ask
  *   Sends a request to the browser and resolves with its reply.
  */
+/** The local helper (scripts/stt-server.py) that takes the screenshots. */
+const EARS = `http://127.0.0.1:${process.env.JARVIS_STT_PORT ?? 8790}`
+
 export function visionServer(ask) {
   return createSdkMcpServer({
     name: 'jarvis_eyes',
     version: '1.0.0',
     instructions:
-      "The camera on the user's machine, pointed at them. Use it when they ask " +
-      'you to look at something. It is not a sensor to poll; it is an act.',
+      "The camera on the user's machine, pointed at them, and their screen. Use " +
+      'them when they ask you to look at something. Neither is a sensor to poll; ' +
+      'looking is an act.',
     // Behind tool search, "look at me" would find nothing and become an apology.
     alwaysLoad: true,
     tools: [
+      tool(
+        'look_at_screen',
+        'Look at what is on their computer screen: one picture of a monitor, as an ' +
+          'image you can read. Use it ONLY when they ask about something on screen ' +
+          '("what does this error say", "summarise what I am reading", "which ' +
+          'button do I press"). `screen`: "cursor" (default) is the monitor the mouse ' +
+          'is on, which is where they are working; "all" is every monitor at once; ' +
+          'a number picks one, counted from the left. Never read out passwords, ' +
+          'card numbers or private messages you happen to see.',
+        {
+          screen: z.string().optional().catch(undefined).describe('"cursor", "all", or 1, 2, 3.'),
+        },
+        async ({ screen }) => {
+          const which = /^(all|cursor|\d)$/.test(String(screen ?? '')) ? String(screen) : 'cursor'
+          try {
+            const res = await fetch(`${EARS}/screen?which=${which}`, { signal: AbortSignal.timeout(10_000) })
+            const reply = await res.json()
+            if (!res.ok || !reply.data) throw new Error(reply.error ?? `http ${res.status}`)
+            return {
+              content: [
+                { type: 'text', text: `The screen (${which === 'cursor' ? 'the monitor the mouse is on' : which}):` },
+                { type: 'image', data: reply.data, mimeType: 'image/jpeg' },
+              ],
+            }
+          } catch (err) {
+            return {
+              isError: true,
+              content: [
+                {
+                  type: 'text',
+                  text: `The screen cannot be seen right now (${err?.message ?? err}). Say so in one sentence.`,
+                },
+              ],
+            }
+          }
+        },
+      ),
       tool(
         'look',
         DESCRIPTION,

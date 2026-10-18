@@ -13,6 +13,7 @@ import { useStore } from './store'
 import {
   HAIL_PATTERN,
   NAME_PATTERN,
+  setVoiceEnrolling,
   startVoice,
   voiceLog,
   type Voice,
@@ -129,6 +130,13 @@ const UNLOCK_CMD = new RegExp(
 )
 const ENROL_CMD =
   /^(?:cadastrar|cadastre|cadastra|registrar|registre|registra|gravar|grave|salvar|salve|aprender|aprenda|reconhecer|reconhe[cç]a|enrol|enroll|register|learn)\s+(?:o\s+|a\s+)?(?:(?:meu|minha|my)\s+)?(?:rosto|face|cara|reconhecimento facial|biometria)[\s.!]*$/i
+/** "Aprende a minha voz" / "esquece a minha voz". */
+const VOICE_ENROL_CMD =
+  /^(?:cadastrar|cadastre|cadastra|registrar|registre|registra|gravar|grave|aprender|aprenda|aprende|reconhecer|reconhe[cç]a|learn)\s+(?:a\s+)?(?:(?:minha|my)\s+)?(?:voz|voice)[\s.!]*$/i
+const VOICE_FORGET_CMD =
+  /^(?:esque[cç]a|esquece|esquecer|apague|apaga|apagar|forget|delete)\s+(?:a\s+)?(?:(?:minha|my)\s+)?(?:voz|voice)[\s.!]*$/i
+/** How long he listens to learn a voice. */
+const VOICE_ENROL_MS = 25_000
 /** Answers to "shall I proceed". Anything that is neither is not an answer. */
 const YES_CMD =
   /^(?:sim|pode|podes|confirmo|confirmado|confirmar?|prossiga|prosseguir|autorizo|autorizado|fa[cç]a|manda|vai|claro|isso|yes|yeah|go ahead|do it|proceed|confirm)\b/i
@@ -416,6 +424,64 @@ export default function App() {
     if (mine === turn.current) goDormant()
   }
 
+  /**
+   * Learn the owner's voice: twenty-odd seconds of him talking, each clip
+   * summarised by the local helper and averaged into a voiceprint. From then
+   * on a wake word in anyone else's voice is ignored.
+   */
+  const enrolVoice = async () => {
+    const mine = ++turn.current
+    clearIdle()
+    const s = store.getState()
+    try {
+      const status = await (await fetch(`${BRIDGE_HTTP_URL}/voice`)).json()
+      if (!status.available) {
+        s.setPhase('speaking')
+        await announce('Voice recognition is not available on this machine, sir.')
+        if (mine === turn.current) goDormant()
+        return
+      }
+    } catch {
+      /* the finish call below reports it */
+    }
+    s.setPhase('speaking')
+    await announce('I shall learn your voice, sir. For the next twenty seconds, talk normally, without saying my name. Begin.')
+    if (mine !== turn.current) return
+    setVoiceEnrolling(true)
+    s.setPhase('listening')
+    await new Promise((r) => setTimeout(r, VOICE_ENROL_MS))
+    setVoiceEnrolling(false)
+    // The last clip may still be on its way to the helper.
+    await new Promise((r) => setTimeout(r, 2500))
+    let clips = 0
+    try {
+      clips = (await (await fetch(`${BRIDGE_HTTP_URL}/voice/finish`, { method: 'POST' })).json()).clips ?? 0
+    } catch {
+      clips = 0
+    }
+    if (mine !== turn.current) return
+    s.setPhase('speaking')
+    await announce(
+      clips
+        ? 'Your voice is learned, sir. From now on I answer only to you.'
+        : 'I did not hear enough to learn your voice, sir. Nothing was saved.',
+    )
+    if (mine === turn.current) goDormant()
+  }
+
+  const forgetVoice = async () => {
+    const mine = ++turn.current
+    clearIdle()
+    try {
+      await fetch(`${BRIDGE_HTTP_URL}/voice/forget`, { method: 'POST' })
+    } catch {
+      /* nothing to forget */
+    }
+    store.getState().setPhase('speaking')
+    await announce('Your voice is forgotten, sir. I answer to anyone again.')
+    if (mine === turn.current) goDormant()
+  }
+
   const enrolFace = async () => {
     const mine = ++turn.current
     clearIdle()
@@ -616,6 +682,8 @@ export default function App() {
     if (store.getState().locked) return void unlock(said)
     if (LOCK_CMD.test(said)) return void lock()
     if (ENROL_CMD.test(said)) return void enrolFace()
+    if (VOICE_ENROL_CMD.test(said)) return void enrolVoice()
+    if (VOICE_FORGET_CMD.test(said)) return void forgetVoice()
     if (BRIEF_CMD.test(said)) return void brief(said)
     if (HELP_CMD.test(said)) return void showHelp()
     const media = MEDIA_CMDS.find(([re]) => re.test(said.trim()))

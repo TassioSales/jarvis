@@ -767,19 +767,23 @@ let earsDownUntil = 0
 let earsSeen = false
 const localEarsUp = () => earsSeen && Date.now() >= earsDownUntil
 
-async function localEars(audio, type) {
+async function localEars(audio, type, voice) {
   if (process.env.JARVIS_STT_LOCAL === '0' || Date.now() < earsDownUntil) return null
   try {
     const res = await fetch(`${EARS_URL}/stt`, {
       method: 'POST',
-      headers: { 'content-type': type },
+      headers: { 'content-type': type, ...(voice === 'enrol' ? { 'x-voice': 'enrol' } : {}) },
       body: audio,
       signal: AbortSignal.timeout(8000),
     })
     if (!res.ok) throw new Error(`http ${res.status}`)
     const data = await res.json()
     earsSeen = true
-    return { text: String(data.text ?? '').trim(), complete: typeof data.complete === 'number' ? data.complete : null }
+    return {
+      text: String(data.text ?? '').trim(),
+      complete: typeof data.complete === 'number' ? data.complete : null,
+      speaker: typeof data.speaker === 'number' ? data.speaker : null,
+    }
   } catch {
     earsDownUntil = Date.now() + 30_000
     return null
@@ -1028,7 +1032,7 @@ function corsFor(req) {
   const headers = { vary: 'origin' }
   if (origin) {
     headers['access-control-allow-origin'] = origin
-    headers['access-control-allow-headers'] = 'content-type'
+    headers['access-control-allow-headers'] = 'content-type, x-voice'
   }
   return headers
 }
@@ -1365,6 +1369,22 @@ const handleRequest = async (req, res) => {
   // use, and a server-side transcriber cannot. Detecting that the user is
   // speaking at all is done locally with voice-activity detection, which never
   // touches this endpoint; this is only for the words.
+  // Learning the owner's voice: the HUD tags clips while enrolling, then asks
+  // for them to be averaged into a voiceprint; or for it to be forgotten.
+  if (req.url === '/voice' || req.url === '/voice/finish' || req.url === '/voice/forget') {
+    try {
+      const up = await fetch(`${EARS_URL}${req.url}`, {
+        method: req.url === '/voice' ? 'GET' : 'POST',
+        signal: AbortSignal.timeout(5000),
+      })
+      res.writeHead(up.status, { ...cors, 'content-type': 'application/json' })
+      return res.end(await up.text())
+    } catch {
+      res.writeHead(503, { ...cors, 'content-type': 'application/json' })
+      return res.end(JSON.stringify({ available: false }))
+    }
+  }
+
   if (req.method === 'POST' && req.url === '/stt') {
     const key = elevenKey()
     if (!key && !geminiReady() && !localEarsUp()) {
@@ -1410,11 +1430,14 @@ const handleRequest = async (req, res) => {
     }
     // Hearing on this machine comes first: no allowance, no round trip to
     // anyone. The cloud services below are only the fallback.
-    const local = await localEars(Buffer.concat(chunks), type)
+    const local = await localEars(Buffer.concat(chunks), type, req.headers['x-voice'])
     if (local !== null) {
       res.writeHead(200, { ...cors, 'content-type': 'application/json' })
       // `complete`: how sure the end-of-turn model is that they had finished.
-      return res.end(JSON.stringify({ text: cleanHeard(local.text), complete: local.complete, by: 'local' }))
+      // `speaker`: how much the voice is the owner's, once one is enrolled.
+      return res.end(
+        JSON.stringify({ text: cleanHeard(local.text), complete: local.complete, speaker: local.speaker, by: 'local' }),
+      )
     }
 
     if ((!key || Date.now() < sttRestUntil) && geminiReady() && (await viaGemini())) return

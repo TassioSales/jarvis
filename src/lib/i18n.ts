@@ -76,6 +76,16 @@ const PT: Record<string, string> = {
   'There is no face on record, sir. Say: register my face.':
     'Não há rosto cadastrado, senhor. Diga: cadastrar meu rosto.',
   'Look at the camera, sir.': 'Olhe para a câmera, senhor.',
+  'Voice recognition is not available on this machine, sir.':
+    'O reconhecimento de voz não está disponível nesta máquina, senhor.',
+  'I shall learn your voice, sir. For the next twenty seconds, talk normally, without saying my name. Begin.':
+    'Vou aprender a sua voz, senhor. Durante os próximos vinte segundos, fale normalmente, sem dizer o meu nome. Pode começar.',
+  'Your voice is learned, sir. From now on I answer only to you.':
+    'Pronto, senhor, aprendi a sua voz. A partir de agora, só atendo ao senhor.',
+  "I did not hear enough to learn your voice, sir. Nothing was saved.":
+    'Não ouvi o suficiente para aprender a sua voz, senhor. Nada foi salvo.',
+  'Your voice is forgotten, sir. I answer to anyone again.':
+    'Esqueci a sua voz, senhor. Volto a atender a qualquer pessoa.',
   'Face registered, sir. Say: lock, whenever you want me to stand guard.':
     'Rosto cadastrado, senhor. Diga: bloquear, quando quiser que eu monte guarda.',
   'I could not see your face clearly, sir. Nothing was registered.':

@@ -462,6 +462,21 @@ export function voiceLog(event: string, detail: object = {}): void {
  * makes the failure impossible to report and impossible to fix. This tells them
  * apart in one glance.
  */
+/**
+ * The owner's voice (scripts/stt-server.py keeps the voiceprint). Below this
+ * likeness, a wake word is someone else's — the television, a video, a guest —
+ * and is ignored. Measured on real speech: the same man 0.62–0.84 against his
+ * own profile, a different man at most 0.25.
+ */
+const OWNER_MIN = 0.45
+
+/** While true, every clip is sent to be learned as the owner's voice, and none
+ *  of it is acted on: what he reads aloud to enrol is not a request. */
+let enrollingVoice = false
+export function setVoiceEnrolling(on: boolean): void {
+  enrollingVoice = on
+}
+
 export const diag = {
   /** Which input engine is running: 'elevenlabs' (VAD+Scribe) or 'browser'. */
   engine: 'browser',
@@ -596,7 +611,7 @@ async function startElevenVoice(h: VoiceHandlers): Promise<Voice> {
     try {
       const res = await fetch(`${BRIDGE_HTTP_URL}/stt`, {
         method: 'POST',
-        headers: { 'content-type': blob.type || 'audio/webm' },
+        headers: { 'content-type': blob.type || 'audio/webm', ...(enrollingVoice ? { 'x-voice': 'enrol' } : {}) },
         body: blob,
       })
       diag.idleMs = Math.round(performance.now() - t0)
@@ -606,7 +621,11 @@ async function startElevenVoice(h: VoiceHandlers): Promise<Voice> {
         drop(`transcription failed (${res.status})`)
         return
       }
-      const { text, complete } = (await res.json()) as { text?: string; complete?: number | null }
+      const { text, complete, speaker } = (await res.json()) as {
+        text?: string
+        complete?: number | null
+        speaker?: number | null
+      }
       // The transcriber annotates what is not speech — "[ruído]", "(música)",
       // "[risos]". Those are a description of the room, not something anyone
       // said, and one of them reached the model as a question.
@@ -627,7 +646,22 @@ async function startElevenVoice(h: VoiceHandlers): Promise<Voice> {
 
       diag.heard = said
       diag.heardAt = Date.now()
-      voiceLog('heard', { mode, text: said, sttMs: diag.idleMs, ...(typeof complete === 'number' ? { complete } : {}) })
+      voiceLog('heard', {
+        mode,
+        text: said,
+        sttMs: diag.idleMs,
+        ...(typeof complete === 'number' ? { complete } : {}),
+        ...(typeof speaker === 'number' ? { speaker } : {}),
+      })
+
+      if (enrollingVoice) return
+
+      // Woken only by the owner, once his voice is known. A clip too short to
+      // judge carries no score and is let through.
+      if (mode === 'wake' && typeof speaker === 'number' && speaker < OWNER_MIN) {
+        drop(`not the owner's voice (${speaker.toFixed(2)})`)
+        return
+      }
 
       if (mode === 'wake') {
         if (WAKE.test(said) && Date.now() - lastWake > WAKE_DEBOUNCE) {
