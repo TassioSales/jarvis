@@ -179,7 +179,10 @@ export default function App() {
    *  that same breath can be told from a name said mid-conversation. */
   const nameAt = useRef(0)
   /** Reminders that fell due while he was busy, said once he is free. */
-  const dueQueue = useRef<{ text: string; briefing: boolean }[]>([])
+  const dueQueue = useRef<{ text: string; briefing: boolean; offer?: string }[]>([])
+  // A habit he has just offered to carry out, and until when a bare "sim"
+  // counts as accepting it.
+  const offer = useRef<{ ask: string; until: number } | null>(null)
   /** Settles the open "shall I proceed" question, if there is one. */
   const consent = useRef<((ok: boolean) => void) | null>(null)
   const voicePoll = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -560,6 +563,7 @@ export default function App() {
       ? reminder.text
       : `${tr('Sir, a reminder')}: ${reminder.text}`
     s.pushTurn({ id: newId(), role: 'jarvis', text: line })
+    offer.current = reminder.offer ? { ask: reminder.offer, until: Date.now() + FOLLOW_UP_MS + 15_000 } : null
     const spk = createSpeaker({ local: true })
     speaker.current = spk
     spk.say(line)
@@ -746,6 +750,19 @@ export default function App() {
       if (YES_CMD.test(answer)) consent.current(true)
       else if (NO_CMD.test(answer)) consent.current(false)
       return
+    }
+
+    // The answer to a habit he offered. Yes becomes the request itself, as if
+    // it had been asked; no is taken quietly; anything else is an ordinary
+    // turn and the offer lapses.
+    if (offer.current) {
+      const pending = offer.current
+      offer.current = null
+      if (Date.now() < pending.until) {
+        const answer = text.replace(UP_TO_NAME, '').trim() || text.trim()
+        if (YES_CMD.test(answer)) return void handle(pending.ask)
+        if (NO_CMD.test(answer)) return void listen(AWAIT_SPEECH_MS)
+      }
     }
 
     // Busy: only something addressed to him by name gets through. Everything

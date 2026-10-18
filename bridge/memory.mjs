@@ -44,6 +44,23 @@ function save(list) {
   writeFileSync(FILE, `# JARVIS memory\n\n${list.map((f) => `- ${f}`).join('\n')}\n`)
 }
 
+/**
+ * Add one fact, unless it is empty, already there, or the file is full.
+ * Shared by the `remember` tool and by what he learns on his own (learn.mjs).
+ *
+ * @returns {'empty' | 'known' | 'full' | 'added'}
+ */
+export function addFact(fact) {
+  const clean = String(fact ?? '').replace(/\s+/g, ' ').trim().slice(0, MAX_FACT_CHARS)
+  if (!clean) return 'empty'
+  const list = facts()
+  if (list.some((f) => f.toLowerCase() === clean.toLowerCase())) return 'known'
+  if (list.length >= MAX_FACTS) return 'full'
+  if (list.length) appendFileSync(FILE, `- ${clean}\n`)
+  else save([clean])
+  return 'added'
+}
+
 /** The stored facts, oldest first — what the side monitor lists. */
 export const memoryFacts = () => facts()
 
@@ -106,20 +123,15 @@ export function memoryServer() {
           'store passwords, keys, card numbers or anything they said in confidence ' +
           'about someone else. Do not announce that you stored it unless they asked.',
         { fact: z.string().describe('The fact, as one short sentence.') },
-        async ({ fact }) => {
-          const clean = String(fact).replace(/\s+/g, ' ').trim().slice(0, MAX_FACT_CHARS)
-          if (!clean) return text('Nothing to remember.')
-          const list = facts()
-          if (list.some((f) => f.toLowerCase() === clean.toLowerCase())) {
-            return text('Already known.')
-          }
-          if (list.length >= MAX_FACTS) {
-            return text('Memory is full. Ask them what may be forgotten.')
-          }
-          if (list.length) appendFileSync(FILE, `- ${clean}\n`)
-          else save([clean])
-          return text('Remembered.')
-        },
+        async ({ fact }) =>
+          text(
+            {
+              empty: 'Nothing to remember.',
+              known: 'Already known.',
+              full: 'Memory is full. Ask them what may be forgotten.',
+              added: 'Remembered.',
+            }[addFact(fact)],
+          ),
       ),
       tool(
         'save_note',

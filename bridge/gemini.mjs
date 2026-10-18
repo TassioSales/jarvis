@@ -170,3 +170,57 @@ export async function transcribe(audio, mime) {
     return null
   }
 }
+
+/**
+ * What a conversation taught him about the user, as short facts.
+ *
+ * Asked once a conversation has gone quiet (see learn.mjs). Strict on
+ * purpose: only what the user said about themselves and will still be true
+ * next month, never what was merely discussed, never anything sensitive. Most
+ * conversations teach nothing, and the right answer to those is an empty list.
+ *
+ * @param {{role: 'user' | 'model', text: string}[]} history
+ * @param {string[]} known  facts already stored, so they are not repeated
+ * @returns {Promise<string[]>}
+ */
+export async function extractFacts(history, known = []) {
+  if (!KEY || !history.some((t) => t.role === 'user')) return []
+  const talk = history.map((t) => `${t.role === 'user' ? 'USUÁRIO' : 'JARVIS'}: ${t.text}`).join('\n')
+  const instruction = `Você mantém a memória de longo prazo de um assistente pessoal.
+Leia a conversa e extraia SOMENTE fatos duradouros que o USUÁRIO disse sobre si mesmo: preferências, hábitos, nomes de pessoas e lugares da vida dele, compromissos recorrentes, endereços que ele pediu para guardar.
+Regras:
+- Nada sobre o mundo, notícias, o tempo ou o que o assistente disse.
+- Nada passageiro ("está cansado hoje", "quer ouvir tal música agora").
+- Nada sensível: saúde, senhas, dinheiro, documentos, o que disse sobre terceiros em confiança.
+- Nada que já esteja na lista de fatos conhecidos, nem reformulado.
+- Cada fato em uma frase curta em português, na terceira pessoa ("Prefere café sem açúcar.").
+- No máximo 3. Na dúvida, não inclua.
+Responda apenas com um array JSON de strings. Se não houver nada, responda [].
+
+Fatos conhecidos:
+${known.slice(-80).map((f) => `- ${f}`).join('\n') || '(nenhum)'}
+
+Conversa:
+${talk}`
+  try {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`,
+      {
+        method: 'POST',
+        signal: AbortSignal.timeout(15000),
+        headers: { 'content-type': 'application/json', 'x-goog-api-key': KEY },
+        body: JSON.stringify({
+          contents: [{ role: 'user', parts: [{ text: instruction }] }],
+          generationConfig: { temperature: 0, maxOutputTokens: 300, responseMimeType: 'application/json' },
+        }),
+      },
+    )
+    if (!res.ok) return []
+    const data = await res.json()
+    const raw = (data.candidates?.[0]?.content?.parts ?? []).map((p) => p.text ?? '').join('')
+    const list = JSON.parse(raw)
+    return Array.isArray(list) ? list.filter((f) => typeof f === 'string' && f.trim()).slice(0, 3) : []
+  } catch {
+    return []
+  }
+}

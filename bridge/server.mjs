@@ -38,6 +38,7 @@ import { transcribe, geminiModel, geminiReady, quick } from './gemini.mjs'
 import { dueReminders } from './reminders.mjs'
 import { control, doServer, routineSteps } from './doer.mjs'
 import { mapsReady, mapsServer } from './maps.mjs'
+import { dueOffer, habitsNote, learnFromConversation, learnServer, recordAction } from './learn.mjs'
 import { cpus, freemem, homedir, hostname, tmpdir, totalmem, uptime } from 'node:os'
 import { appendFileSync, mkdirSync, readFileSync, realpathSync, statSync, renameSync } from 'node:fs'
 import { readFile, realpath, stat } from 'node:fs/promises'
@@ -371,6 +372,8 @@ function decide(name, writes) {
     // Everything else here opens something, and is asked about first.
     // Maps only read.
     if (server === 'jarvis_maps') return true
+    // Reading what he has learned, or forgetting a habit, changes nothing outside his own file.
+    if (server === 'jarvis_learn') return true
 
     // The house. Looking at it is free. Switching asks, unless the user has
     // said that switching is something they never want to be asked about —
@@ -1584,6 +1587,15 @@ setInterval(() => {
       client.send(JSON.stringify({ type: 'reminder', text: r.text, briefing: r.briefing }))
     }
   }
+  // A habit whose hour has come: offered like a reminder, with what to do if
+  // the answer is yes.
+  const offer = dueOffer()
+  if (offer) {
+    console.log(`[jarvis] offering a habit: ${offer.offer}`)
+    for (const client of open) {
+      client.send(JSON.stringify({ type: 'reminder', text: offer.text, briefing: false, offer: offer.offer }))
+    }
+  }
 }, 20_000)
 
 wss.on('connection', (socket) => {
@@ -1671,10 +1683,30 @@ wss.on('connection', (socket) => {
   let lastQuestion = ''
   let lastForDisplay = false
   let quickAbort = null
+  // Everything said since he last read the conversation back for things to
+  // learn (learn.mjs). Read back once it has been quiet for a few minutes,
+  // and when the window closes.
+  let unlearned = []
+  let learnTimer = null
+  const learnNow = () => {
+    clearTimeout(learnTimer)
+    const talk = unlearned
+    unlearned = []
+    if (!talk.some((t) => t.role === 'user')) return
+    learnFromConversation(talk)
+      .then((added) => added.length && console.log(`[jarvis] learned: ${added.join(' | ')}`))
+      .catch(() => {})
+  }
   const note = (role, text) => {
     recent.push({ role, text: String(text).slice(0, 600) })
     if (recent.length > 12) recent.shift()
+    unlearned.push({ role, text: String(text).slice(0, 600) })
+    if (unlearned.length > 40) unlearned.shift()
+    clearTimeout(learnTimer)
+    learnTimer = setTimeout(learnNow, 4 * 60_000)
   }
+  // Tool calls by id, until their result says whether they ran.
+  const pendingActions = new Map()
   const PRIME_TEXT = 'Systems check before the user arrives. Reply with the single word: ready.'
 
   /**
@@ -1827,6 +1859,8 @@ wss.on('connection', (socket) => {
         jarvis_do: doServer(),
         // Traffic and travel times, when there is a TomTom key.
         ...(mapsReady() ? { jarvis_maps: mapsServer() } : {}),
+        // The habits he has noticed, and the means to drop one.
+        jarvis_learn: learnServer(),
       },
       // A plain system prompt, not the claude_code preset. The preset is
       // tuned for a coding agent — verbose, file-oriented, and a large chunk
@@ -1834,7 +1868,7 @@ wss.on('connection', (socket) => {
       // keeps answers short enough to speak, and cuts cost per turn.
       // Read per session, so a fact learned in one conversation is known in the
       // next without restarting the bridge.
-      systemPrompt: SYSTEM_PROMPT + LANGUAGE_NOTE + worldNote() + memoryNote(),
+      systemPrompt: SYSTEM_PROMPT + LANGUAGE_NOTE + worldNote() + memoryNote() + habitsNote(),
       // Run from the home directory so project-scoped MCP servers don't shadow
       // the global ones, and so file tools have a sane root.
       cwd: homedir(),
@@ -1968,6 +2002,7 @@ wss.on('connection', (socket) => {
             for (const block of msg.content ?? msg.message?.content ?? []) {
               if (block.type === 'tool_use') {
                 announceTool(block.id, block.name)
+                pendingActions.set(block.id, { name: block.name, input: block.input })
               }
             }
             break
@@ -1982,6 +2017,9 @@ wss.on('connection', (socket) => {
             for (const block of blocks) {
               if (block?.type === 'tool_result') {
                 settleTool(block.tool_use_id, block.is_error === true)
+                const action = pendingActions.get(block.tool_use_id)
+                pendingActions.delete(block.tool_use_id)
+                if (action && block.is_error !== true) recordAction(action.name, action.input)
               }
             }
             break
@@ -2170,6 +2208,7 @@ wss.on('connection', (socket) => {
   socket.on('close', () => {
     console.log('[jarvis] client disconnected')
     closed = true
+    learnNow()
     deliver?.(null)
     session.close?.()
   })

@@ -85,7 +85,8 @@ export type CaptureResult = { data?: string; mimeType?: string; error?: string }
 
 /** A reminder that has fallen due. `briefing` means run the briefing rather
  *  than say `text`. */
-export type Reminder = { text: string; briefing: boolean }
+/** `offer`: a habit he is offering to carry out — what to ask for on a yes. */
+export type Reminder = { text: string; briefing: boolean; offer?: string }
 let onReminder: ((r: Reminder) => void) | null = null
 export function watchReminders(fn: (r: Reminder) => void) {
   onReminder = fn
@@ -225,7 +226,11 @@ function dispatch(ws: WebSocket) {
           .catch((err) => reply({ error: String(err?.message ?? err) }))
       }
     } else if (msg.type === 'reminder') {
-      onReminder?.({ text: String(msg.text ?? ''), briefing: msg.briefing === true })
+      onReminder?.({
+        text: String(msg.text ?? ''),
+        briefing: msg.briefing === true,
+        ...(typeof msg.offer === 'string' && msg.offer ? { offer: msg.offer } : {}),
+      })
     } else if (msg.type === 'confirm' && msg.id) {
       const id = msg.id
       const answer = (ok: boolean) => {
