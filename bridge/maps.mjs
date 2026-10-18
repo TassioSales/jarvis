@@ -46,6 +46,31 @@ async function locate(query) {
 
 const minutes = (s) => Math.round(s / 60)
 
+/**
+ * One drive, with traffic, as numbers: for the dashboard as much as the tool.
+ * @returns {Promise<{from: string, to: string, minutes: number, km: number, delay: number, usual: number | null} | null>}
+ */
+export async function routeSummary(from, to) {
+  if (!KEY) return null
+  const [a, b] = await Promise.all([locate(from), locate(to)])
+  if (!a || !b) return null
+  const data = await get(`/routing/1/calculateRoute/${a.lat},${a.lon}:${b.lat},${b.lon}/json`, {
+    traffic: 'true',
+    travelMode: 'car',
+    computeTravelTimeFor: 'all',
+  })
+  const s = data.routes?.[0]?.summary
+  if (!s) return null
+  return {
+    from: a.label,
+    to: b.label,
+    minutes: minutes(s.travelTimeInSeconds),
+    km: Math.round(s.lengthInMeters / 100) / 10,
+    delay: minutes(s.trafficDelayInSeconds ?? 0),
+    usual: s.noTrafficTravelTimeInSeconds ? minutes(s.noTrafficTravelTimeInSeconds) : null,
+  }
+}
+
 export function mapsServer() {
   return createSdkMcpServer({
     name: 'jarvis_maps',

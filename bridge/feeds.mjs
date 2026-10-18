@@ -83,10 +83,16 @@ export const weather = cached(WEATHER_TTL, async () => {
   const data = await getJson(
     'https://api.open-meteo.com/v1/forecast?timezone=auto&forecast_days=7' +
       `&latitude=${at.lat}&longitude=${at.lon}` +
-      '&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m' +
+      '&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m,uv_index,is_day' +
       '&hourly=temperature_2m,precipitation_probability' +
-      '&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max',
+      '&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,uv_index_max,sunrise,sunset',
   )
+  // Air quality, from the same provider's sister service. Optional: a
+  // forecast without it is still a forecast.
+  const air = await getJson(
+    'https://air-quality-api.open-meteo.com/v1/air-quality?timezone=auto' +
+      `&latitude=${at.lat}&longitude=${at.lon}&current=us_aqi,pm2_5,pm10`,
+  ).catch(() => null)
 
   // The next twenty-four hours, starting from the hour we are in — a chart
   // that begins at midnight spends half its width on a day that is over.
@@ -109,7 +115,14 @@ export const weather = cached(WEATHER_TTL, async () => {
       humidity: data.current.relative_humidity_2m,
       wind: data.current.wind_speed_10m,
       code: data.current.weather_code,
+      uv: data.current.uv_index ?? null,
+      day: data.current.is_day === 1,
     },
+    sun: { rise: data.daily.sunrise?.[0] ?? null, set: data.daily.sunset?.[0] ?? null },
+    uvMax: data.daily.uv_index_max?.[0] ?? null,
+    air: air?.current
+      ? { aqi: air.current.us_aqi ?? null, pm25: air.current.pm2_5 ?? null, pm10: air.current.pm10 ?? null }
+      : null,
     today: {
       min: data.daily.temperature_2m_min[0],
       max: data.daily.temperature_2m_max[0],

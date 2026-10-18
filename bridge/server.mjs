@@ -35,12 +35,13 @@ import {
   worldNote,
 } from './feeds.mjs'
 import { transcribe, geminiModel, geminiReady, quick } from './gemini.mjs'
-import { dueReminders } from './reminders.mjs'
-import { control, doServer, routineSteps } from './doer.mjs'
-import { mapsReady, mapsServer } from './maps.mjs'
-import { dueOffer, habitsNote, learnFromConversation, learnServer, recordAction } from './learn.mjs'
+import { dueReminders, listReminders } from './reminders.mjs'
+import { system } from './system.mjs'
+import { control, doServer, mediaSession, routineSteps } from './doer.mjs'
+import { mapsReady, mapsServer, routeSummary } from './maps.mjs'
+import { dueOffer, habits, habitsNote, learnFromConversation, learnServer, recordAction } from './learn.mjs'
 import { cpus, freemem, homedir, hostname, tmpdir, totalmem, uptime } from 'node:os'
-import { appendFileSync, mkdirSync, readFileSync, realpathSync, statSync, renameSync } from 'node:fs'
+import { appendFileSync, mkdirSync, readFileSync, readdirSync, realpathSync, statSync, renameSync } from 'node:fs'
 import { readFile, realpath, stat } from 'node:fs/promises'
 import { isAbsolute, join, relative, resolve as resolvePath } from 'node:path'
 import { openRemote, proxyError, vetTarget, PROXY_UA } from './net.mjs'
@@ -812,6 +813,24 @@ function cleanHeard(text) {
   return PHANTOMS.some((re) => re.test(t)) ? '' : t
 }
 
+/**
+ * What the core monitor shows about how he is doing: who answered, who
+ * transcribed and how fast, and whether the cloud voice is still speaking.
+ * Counted since the bridge started — a restart is a fresh page.
+ */
+const stats = {
+  since: new Date().toISOString(),
+  answers: { gemini: 0, claude: 0 },
+  heard: { local: 0, elevenlabs: 0, gemini: 0 },
+  sttMs: [],
+  voice: 'unknown',
+}
+const noteStt = (by, ms) => {
+  stats.heard[by]++
+  stats.sttMs.push(ms)
+  if (stats.sttMs.length > 50) stats.sttMs.shift()
+}
+
 /** Until when the speech service is left alone after refusing for lack of credit. */
 let sttRestUntil = 0
 const VOICE_ID = process.env.JARVIS_VOICE_ID ?? 'JBFqnCBsd6RMkjVDRZzb'
@@ -1068,6 +1087,24 @@ const handleRequest = async (req, res) => {
   // What the telemetry monitor shows: the machine's vitals, how the brain is
   // configured, and what he has been told to remember. Read-only, and behind
   // the same origin check as everything else here — the facts are personal.
+  // The core monitor: the machine in full.
+  if (req.method === 'GET' && req.url === '/system') {
+    res.writeHead(200, { ...cors, 'content-type': 'application/json', 'cache-control': 'no-store' })
+    return res.end(JSON.stringify(system()))
+  }
+
+  // The core monitor: every part of him, whether it is working, and his numbers.
+  if (req.method === 'GET' && req.url === '/status') {
+    res.writeHead(200, { ...cors, 'content-type': 'application/json', 'cache-control': 'no-store' })
+    return res.end(JSON.stringify(await statusReport()))
+  }
+
+  // The day monitor: what is coming, what is playing, the drive to work.
+  if (req.method === 'GET' && req.url === '/today') {
+    res.writeHead(200, { ...cors, 'content-type': 'application/json', 'cache-control': 'no-store' })
+    return res.end(JSON.stringify(await todayReport()))
+  }
+
   if (req.method === 'GET' && req.url === '/telemetry') {
     res.writeHead(200, { ...cors, 'content-type': 'application/json', 'cache-control': 'no-store' })
     return res.end(
@@ -1343,9 +1380,11 @@ const handleRequest = async (req, res) => {
         },
       )
       if (!upstream.ok) {
+        stats.voice = upstream.status === 401 || upstream.status === 402 ? 'no credit' : `error ${upstream.status}`
         res.writeHead(upstream.status, cors)
         return res.end(await upstream.text())
       }
+      stats.voice = 'ok'
 
       // Pipe it through rather than buffering. Waiting for the whole file here
       // would throw away everything the streaming endpoint just bought us.
@@ -1421,9 +1460,11 @@ const handleRequest = async (req, res) => {
     // Out of credit, the speech service refuses every clip. Asking it again
     // for each one only adds a failed round trip before the understudy is
     // tried, so it is left alone for a while once it has said no.
+    const sttStart = Date.now()
     const viaGemini = async () => {
       const heard = await transcribe(Buffer.concat(chunks), type)
       if (heard === null) return false
+      noteStt('gemini', Date.now() - sttStart)
       res.writeHead(200, { ...cors, 'content-type': 'application/json' })
       res.end(JSON.stringify({ text: cleanHeard(heard), by: 'gemini' }))
       return true
@@ -1432,6 +1473,7 @@ const handleRequest = async (req, res) => {
     // anyone. The cloud services below are only the fallback.
     const local = await localEars(Buffer.concat(chunks), type, req.headers['x-voice'])
     if (local !== null) {
+      noteStt('local', Date.now() - sttStart)
       res.writeHead(200, { ...cors, 'content-type': 'application/json' })
       // `complete`: how sure the end-of-turn model is that they had finished.
       // `speaker`: how much the voice is the owner's, once one is enrolled.
@@ -1488,6 +1530,7 @@ const handleRequest = async (req, res) => {
         return res.end(why)
       }
       const data = await upstream.json()
+      noteStt('elevenlabs', Date.now() - sttStart)
       res.writeHead(200, { ...cors, 'content-type': 'application/json' })
       return res.end(JSON.stringify({ text: cleanHeard(data.text) }))
     } catch (err) {
@@ -1498,6 +1541,119 @@ const handleRequest = async (req, res) => {
 
   res.writeHead(404, cors)
   res.end()
+}
+
+// ------------------------------------------------------------ the monitors
+
+/** Ask the local helper how it is, briefly; null when it does not answer. */
+const earsAsk = (path) =>
+  fetch(`${EARS_URL}${path}`, { signal: AbortSignal.timeout(1500) })
+    .then((r) => (r.ok ? r.json() : null))
+    .catch(() => null)
+
+let statusCache = { at: 0, ears: null, voice: null }
+async function statusReport() {
+  if (Date.now() - statusCache.at > 10_000) {
+    const [ears, voice] = await Promise.all([earsAsk('/health'), earsAsk('/voice')])
+    statusCache = { at: Date.now(), ears, voice }
+  }
+  const { ears, voice } = statusCache
+  const house = Boolean(MCP_SERVERS.casa || MCP_SERVERS.casa_ewelink)
+  const sttAvg = stats.sttMs.length ? Math.round(stats.sttMs.reduce((a, b) => a + b, 0) / stats.sttMs.length) : null
+  let learned = { habits: 0, facts: 0 }
+  try {
+    learned = { habits: habits().length, facts: memoryFacts().length }
+  } catch {
+    /* nothing learned yet */
+  }
+  const cloudVoice = !elevenKey()
+    ? { state: 'off', detail: 'sem chave' }
+    : stats.voice === 'ok'
+      ? { state: 'ok', detail: 'ativa' }
+      : stats.voice === 'unknown'
+        ? { state: 'warn', detail: 'ainda não usada' }
+        : stats.voice === 'no credit'
+          ? { state: 'down', detail: 'sem crédito · voz do sistema' }
+          : { state: 'down', detail: stats.voice }
+  return {
+    model: MODEL,
+    effort: EFFORT,
+    services: [
+      { id: 'brain', label: 'Claude', state: 'ok', detail: MODEL.replace(/^claude-/, '') },
+      { id: 'quick', label: 'Gemini', state: geminiReady() ? 'ok' : 'off', detail: geminiReady() ? geminiModel() : 'sem chave' },
+      {
+        id: 'ears',
+        label: 'Ouvido local',
+        state: ears ? 'ok' : 'down',
+        detail: ears ? `Whisper ${ears.model} · ${ears.device === 'cuda' ? 'GPU' : 'CPU'}` : 'parado',
+      },
+      {
+        id: 'owner',
+        label: 'Voz do dono',
+        state: voice?.enrolled ? 'ok' : voice?.available ? 'warn' : 'off',
+        detail: voice?.enrolled ? 'cadastrada' : voice?.available ? 'não cadastrada' : 'indisponível',
+      },
+      { id: 'voice', label: 'Voz ElevenLabs', ...cloudVoice },
+      { id: 'maps', label: 'Mapas', state: mapsReady() ? 'ok' : 'off', detail: mapsReady() ? 'TomTom' : 'sem chave' },
+      { id: 'house', label: 'Casa', state: house ? 'ok' : 'off', detail: house ? 'conectada' : 'não conectada' },
+      {
+        id: 'learn',
+        label: 'Aprendizagem',
+        state: process.env.JARVIS_LEARN === '0' ? 'off' : 'ok',
+        detail: `${learned.habits} hábitos · ${learned.facts} fatos`,
+      },
+    ],
+    stats: { since: stats.since, answers: stats.answers, heard: stats.heard, sttAvg },
+  }
+}
+
+let playing = { at: 0, value: null }
+const commute = { at: 0, value: null }
+async function todayReport() {
+  if (Date.now() - playing.at > 5000) {
+    playing.at = Date.now()
+    const sessions = await mediaSession('status').catch(() => null)
+    playing.value =
+      (sessions ?? []).find((x) => x.status === 'Playing' && x.title) ?? (sessions ?? []).find((x) => x.title) ?? null
+  }
+  const home = process.env.JARVIS_HOME_ADDRESS?.trim()
+  const work = process.env.JARVIS_WORK_ADDRESS?.trim()
+  if (home && work && mapsReady() && Date.now() - commute.at > 10 * 60_000) {
+    commute.at = Date.now()
+    // The drive that matters at this hour: to work in the morning, home after.
+    const toWork = new Date().getHours() < 13
+    commute.value = await routeSummary(toWork ? home : work, toWork ? work : home)
+      .then((r) => (r ? { ...r, toWork } : null))
+      .catch(() => null)
+  }
+  let notes = []
+  try {
+    const dir = join(homedir(), '.jarvis', 'notes')
+    notes = readdirSync(dir)
+      .filter((n) => n.endsWith('.md'))
+      .map((n) => ({ title: n.replace(/.md$/, '').replace(/-/g, ' '), at: statSync(join(dir, n)).mtime.toISOString() }))
+      .sort((a, b) => b.at.localeCompare(a.at))
+      .slice(0, 5)
+  } catch {
+    /* no notes yet */
+  }
+  let learnedHabits = []
+  try {
+    learnedHabits = habits().map((h) => ({ time: h.time, desc: h.desc, days: h.days }))
+  } catch {
+    /* nothing learned yet */
+  }
+  return {
+    reminders: listReminders()
+      .map((r) => ({ text: r.briefing ? 'Briefing do dia' : r.text, at: r.at, daily: r.daily }))
+      .slice(0, 8),
+    habits: learnedHabits,
+    notes,
+    facts: memoryFacts().slice(-6),
+    playing: playing.value,
+    commute: commute.value,
+    commuteSet: Boolean(home && work),
+  }
 }
 
 const server = http.createServer((req, res) => {
@@ -2074,6 +2230,7 @@ wss.on('connection', (socket) => {
             if (understudy) {
               note('model', understudy)
               sendTurn({ type: 'text', delta: understudy })
+              stats.answers.gemini++
               sendTurn({ type: 'done', text: understudy, costUsd: msg.total_cost_usd ?? null, brain: 'gemini' })
             } else if (priming) {
               // The warm-up is over, however it ended. Cleared here as well as
@@ -2082,6 +2239,7 @@ wss.on('connection', (socket) => {
               console.log('[jarvis] session warm')
             } else if (msg.subtype === 'success') {
               if (!lastForDisplay && msg.result) note('model', msg.result)
+              stats.answers.claude++
               sendTurn({
                 type: 'done',
                 text: NOT_LOGGED_IN.test(msg.result ?? '')
@@ -2180,6 +2338,7 @@ wss.on('connection', (socket) => {
             aside.push({ q: text, a: answer.text })
             if (aside.length > 4) aside.shift()
             send({ type: 'text', delta: answer.text, ask: id })
+            stats.answers.gemini++
             send({ type: 'done', text: answer.text, costUsd: 0, ask: id, brain: 'gemini' })
             return
           }
