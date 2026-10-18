@@ -99,6 +99,10 @@ const PT: Record<string, string> = {
   WORLD: 'MUNDO',
   OVERVIEW: 'PANORAMA',
   'LOCAL TIME': 'HORA LOCAL',
+  'Microphone off, sir. Press M when you want me back.':
+    'Microfone desligado, senhor. Aperte M quando quiser que eu volte.',
+  'Microphone on, sir.': 'Microfone ligado, senhor.',
+  'MIC OFF · PRESS M': 'MICROFONE DESLIGADO · APERTE M',
   'Personal assistant · neural core': 'Assistente pessoal · núcleo neural',
   'THE DRIVE': 'TRAJETO',
   'to work': 'para o trabalho',

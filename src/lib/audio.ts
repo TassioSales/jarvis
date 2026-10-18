@@ -9,6 +9,21 @@ let ctx: AudioContext | null = null
 let analyser: AnalyserNode | null = null
 let buf: Uint8Array | null = null
 
+/**
+ * Give the microphone back to the operating system (after adewaskar/jarvis#33).
+ * Stopping the voice loop is not enough: the stream stays open and so do the
+ * browser's and the system's recording lights. Only stopping every track puts
+ * them out. The next getMic() asks for a fresh stream.
+ */
+export function releaseMic(): void {
+  stream?.getTracks().forEach((t) => t.stop())
+  stream = null
+  void ctx?.close()
+  ctx = null
+  analyser = null
+  buf = null
+}
+
 export async function getMic(): Promise<MediaStream> {
   if (stream) return stream
   stream = await navigator.mediaDevices.getUserMedia({

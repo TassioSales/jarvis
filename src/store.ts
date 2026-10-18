@@ -240,6 +240,8 @@ type State = {
   consent: { tool: string; detail: string } | null
   /** Whether he is waiting on a face before answering to anyone. */
   locked: boolean
+  /** The microphone is off and given back to the system — nothing is heard. */
+  muted: boolean
   /** Where the identity check currently stands; drives the lock's animation. */
   identity: 'idle' | 'scanning' | 'granted' | 'denied'
   /** Cards currently on the display, newest last. */
@@ -258,6 +260,7 @@ type State = {
   setLooking: (why: string | null) => void
   setBootNote: (n: string) => void
   setLocked: (locked: boolean) => void
+  setMuted: (muted: boolean) => void
   setBriefing: (briefing: State['briefing']) => void
   setConsent: (consent: State['consent']) => void
   setHelp: (help: boolean) => void
@@ -304,6 +307,7 @@ export const useStore = create<State>((set) => ({
   expandedBlade: null,
   bootNote: '',
   locked: false,
+  muted: false,
   identity: 'idle',
   briefing: null,
   consent: null,
@@ -315,6 +319,7 @@ export const useStore = create<State>((set) => ({
   setLooking: (looking) => set({ looking }),
   setBootNote: (bootNote) => set({ bootNote }),
   setLocked: (locked) => set({ locked }),
+  setMuted: (muted) => set({ muted }),
   setBriefing: (briefing) => set({ briefing }),
   setConsent: (consent) => set({ consent }),
   setHelp: (help) => set({ help }),

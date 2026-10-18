@@ -1,3 +1,4 @@
+/* eslint-disable no-eval */
 // Checks the patterns that decide what he hears, against phrases that must and
 // must not match. Run with `npm run test:voice`.
 //
@@ -29,7 +30,7 @@ void HAIL
 const THING = eval(source(app, 'THING'))
 void THING
 const patterns = { WAKE, GREETING }
-for (const name of ['UP_TO_NAME', 'STOP_CMD', 'BARE_STOP', 'LOCK_CMD', 'UNLOCK_CMD', 'ENROL_CMD', 'IDENTIFY_CMD', 'BRIEF_CMD', 'HELP_CMD', 'YES_CMD', 'NO_CMD', 'VOICE_ENROL_CMD', 'VOICE_FORGET_CMD']) {
+for (const name of ['UP_TO_NAME', 'STOP_CMD', 'BARE_STOP', 'LOCK_CMD', 'UNLOCK_CMD', 'ENROL_CMD', 'IDENTIFY_CMD', 'BRIEF_CMD', 'HELP_CMD', 'YES_CMD', 'NO_CMD', 'VOICE_ENROL_CMD', 'VOICE_FORGET_CMD', 'MUTE_CMD']) {
   patterns[name] = eval(source(app, name))
 }
 void NAME
@@ -56,6 +57,7 @@ const cases = {
   YES_CMD: { yes: ['sim', 'Sim, pode.', 'confirmo', 'prossiga'], no: ['não', 'talvez', 'espera'] },
   NO_CMD: { yes: ['não', 'Não, cancela.', 'negativo'], no: ['sim', 'pode'] },
   VOICE_ENROL_CMD: { yes: ['aprende a minha voz', 'Aprenda minha voz.', 'cadastrar minha voz', 'reconhecer a minha voz'], no: ['aprende a tocar violão', 'minha voz está rouca', 'cadastrar meu rosto'] },
+  MUTE_CMD: { yes: ['desliga o microfone', 'Desligue o microfone.', 'para de me ouvir', 'silencia o microfone'], no: ['desliga a luz', 'mudo', 'o microfone está ruim', 'para de tocar'] },
   VOICE_FORGET_CMD: { yes: ['esquece a minha voz', 'Apague minha voz.', 'esquecer minha voz'], no: ['esquece isso', 'apaga a luz'] },
 }
 

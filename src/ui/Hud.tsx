@@ -182,6 +182,7 @@ export function Hud() {
   const turns = useStore((s) => s.turns)
   const activeTool = useStore((s) => s.activeTool)
   const connected = useStore((s) => s.connected)
+  const muted = useStore((s) => s.muted)
   const railStatus = useBridge<RailStatus>('/status', 10_000)
   const railSystem = useBridge<RailSystem>('/system', 4000)
   const railSky = useBridge<RailSky>('/weather', 10 * 60_000)
@@ -227,6 +228,12 @@ export function Hud() {
             <span className="brand-mark">WEDNESDAY</span>
             <span className="brand-sub">{tr('Personal assistant · neural core')}</span>
           </div>
+        )}
+
+        {muted && (
+          <button className="mic-off" onClick={() => window.dispatchEvent(new Event('jarvis-unmute'))}>
+            {tr('MIC OFF · PRESS M')}
+          </button>
         )}
 
         <div className="status">

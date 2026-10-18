@@ -52,7 +52,7 @@ import {
   usingBridge,
   type Msg,
 } from './lib/brain'
-import { startAnalyser, micLevel } from './lib/audio'
+import { startAnalyser, micLevel, releaseMic } from './lib/audio'
 import { probeCapabilities } from './lib/capabilities'
 import { env } from './config'
 import { t as tr } from './lib/i18n'
@@ -135,6 +135,9 @@ const VOICE_ENROL_CMD =
   /^(?:cadastrar|cadastre|cadastra|registrar|registre|registra|gravar|grave|aprender|aprenda|aprende|reconhecer|reconhe[cç]a|learn)\s+(?:a\s+)?(?:(?:minha|my)\s+)?(?:voz|voice)[\s.!]*$/i
 const VOICE_FORGET_CMD =
   /^(?:esque[cç]a|esquece|esquecer|apague|apaga|apagar|forget|delete)\s+(?:a\s+)?(?:(?:minha|my)\s+)?(?:voz|voice)[\s.!]*$/i
+/** "Desliga o microfone" — the voice way in to the mute. The way out is M, or the badge. */
+const MUTE_CMD =
+  /^(?:desliga|desligue|desligar|desativa|desative|desativar|corta|corte|silencia|silencie)\s+(?:o\s+)?microfone[\s.!]*$|^(?:para|pare)\s+de\s+(?:me\s+)?ouvir[\s.!]*$|^(?:mute|turn off)\s+(?:the\s+)?(?:mic|microphone)[\s.!]*$/i
 /** How long he listens to learn a voice. */
 const VOICE_ENROL_MS = 25_000
 /** Answers to "shall I proceed". Anything that is neither is not an answer. */
@@ -174,6 +177,15 @@ export default function App() {
   const history = useRef<Msg[]>([])
   const speaker = useRef<ReturnType<typeof createSpeaker> | null>(null)
   const voice = useRef<Voice | null>(null)
+  // What the voice loop was started with, so a mute can start it again the same way.
+  const voiceHandlers = useRef<Parameters<typeof startVoice>[0] | null>(null)
+  // The badge on the HUD unmutes by event, since it lives outside this component.
+  const unmuteRef = useRef<() => void>(() => {})
+  useEffect(() => {
+    const on = () => unmuteRef.current()
+    window.addEventListener('jarvis-unmute', on)
+    return () => window.removeEventListener('jarvis-unmute', on)
+  }, [])
 
   /**
    * Monotonic turn counter. Every await in a turn checks it on the way out:
@@ -429,6 +441,41 @@ export default function App() {
    * summarised by the local helper and averaged into a voiceprint. From then
    * on a wake word in anyone else's voice is ignored.
    */
+  /**
+   * The microphone off, for real: the voice loop stopped and every track given
+   * back, so the browser's and the system's recording lights go out. Nothing
+   * is transcribed, by anyone, until M is pressed or the badge clicked.
+   */
+  const mute = async () => {
+    const s = store.getState()
+    if (s.muted) return
+    ++turn.current
+    clearIdle()
+    s.setPhase('speaking')
+    await announce('Microphone off, sir. Press M when you want me back.')
+    voice.current?.stop()
+    voice.current = null
+    releaseMic()
+    s.setMuted(true)
+    goDormant()
+  }
+
+  const unmute = async () => {
+    const s = store.getState()
+    if (!s.muted || !voiceHandlers.current) return
+    s.setMuted(false)
+    try {
+      await startAnalyser()
+    } catch {
+      /* the reactor just will not pulse */
+    }
+    voice.current = await startVoice(voiceHandlers.current)
+    s.setPhase('speaking')
+    await announce('Microphone on, sir.')
+    goDormant()
+  }
+  unmuteRef.current = () => void unmute()
+
   const enrolVoice = async () => {
     const mine = ++turn.current
     clearIdle()
@@ -682,6 +729,7 @@ export default function App() {
     if (store.getState().locked) return void unlock(said)
     if (LOCK_CMD.test(said)) return void lock()
     if (ENROL_CMD.test(said)) return void enrolFace()
+    if (MUTE_CMD.test(said)) return void mute()
     if (VOICE_ENROL_CMD.test(said)) return void enrolVoice()
     if (VOICE_FORGET_CMD.test(said)) return void forgetVoice()
     if (BRIEF_CMD.test(said)) return void brief(said)
@@ -1126,7 +1174,7 @@ export default function App() {
     store.getState().setVoice(currentVoiceName())
 
     // One voice loop, started once, running until the page closes.
-    voice.current = await startVoice({
+    voiceHandlers.current = {
       mode,
       onWake,
       onName,
@@ -1134,7 +1182,8 @@ export default function App() {
       onPartial,
       onUtterance,
       onError: onVoiceError,
-    })
+    }
+    voice.current = await startVoice(voiceHandlers.current)
 
     // Come up locked if there is a face to wait for. Decided here, at the end
     // of boot, so the lock is in place before the wake word can be heard.
@@ -1320,6 +1369,16 @@ export default function App() {
           return
         }
         if (e.key === 'Escape' && st.help) st.setHelp(false)
+      }
+
+      // M: the microphone off and on. Not while typing into something.
+      if (e.key === 'm' && !e.repeat && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        const st = store.getState()
+        if (st.phase !== 'offline' && st.phase !== 'boot') {
+          e.preventDefault()
+          void (st.muted ? unmute() : mute())
+          return
+        }
       }
 
       // L locks, F enrols a face. Both are also spoken commands; the keys are

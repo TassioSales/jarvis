@@ -1918,3 +1918,21 @@ kbd {
   transform: translate(-50%, -50%);
   pointer-events: none;
 }
+
+/* The microphone is off: said in the one place everyone looks, and the way back. */
+.mic-off {
+  position: absolute;
+  left: 50%;
+  top: 22px;
+  transform: translateX(-50%);
+  padding: 6px 16px;
+  font: inherit;
+  font-size: 11px;
+  letter-spacing: 0.3em;
+  color: #ff4d6d;
+  background: rgb(255 77 109 / 0.08);
+  border: 1px solid rgb(255 77 109 / 0.6);
+  cursor: pointer;
+  animation: rail-blink 1.6s steps(2) infinite;
+  z-index: 5;
+}
