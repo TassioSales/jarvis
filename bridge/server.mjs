@@ -2097,6 +2097,15 @@ wss.on('connection', (socket) => {
    */
   let settling = Promise.resolve()
   let finishTurn = null
+  /**
+   * Which question a deliberate interrupt is cancelling (adewaskar/jarvis#12).
+   * The SDK has no 'cancelled' result: an interrupted turn comes back as
+   * error_during_execution, the same as one that broke. Without telling them
+   * apart, every barge-in was logged as a failure — and, here, handed to the
+   * stand-in brain, which answered a question the user had just cut off and
+   * wrote that answer into the conversation history.
+   */
+  let cancelledAsk = null
 
   const turnFinished = () =>
     new Promise((resolve) => {
@@ -2402,8 +2411,9 @@ wss.on('connection', (socket) => {
             // Claude could not answer — signed out, over its allowance,
             // unreachable. With an understudy configured, he still answers:
             // without tools, and saying so where the question needed them.
+            const interrupted = msg.subtype !== 'success' && cancelledAsk !== null && cancelledAsk === answering
             let understudy = null
-            if (!priming && !lastForDisplay && lastQuestion && geminiReady() && claudeFailed(msg)) {
+            if (!interrupted && !priming && !lastForDisplay && lastQuestion && geminiReady() && claudeFailed(msg)) {
               console.warn(`[jarvis] Claude could not answer (${msg.subtype}); the small model is standing in`)
               const answer = await quick(recent, lastQuestion, { standIn: true, notes: worldNote() + memoryNote() + agendaNote() })
               if (!answer.escalate) understudy = answer.text
@@ -2429,6 +2439,9 @@ wss.on('connection', (socket) => {
                   : (msg.result ?? ''),
                 costUsd: msg.total_cost_usd ?? null,
               })
+            } else if (interrupted) {
+              // Cut off on purpose; the HUD already discards this turn.
+              console.log('[jarvis] turn interrupted')
             } else {
               console.error(
                 `[jarvis] turn failed: ${msg.subtype}`,
@@ -2439,6 +2452,7 @@ wss.on('connection', (socket) => {
                 message: RESULT_FAILURES[msg.subtype] ?? RESULT_FAILURES.default,
               })
             }
+            cancelledAsk = null
             // Whatever was waiting on this turn to finish can go now. This is
             // the only place a turn is genuinely over.
             finishTurn?.()
@@ -2562,6 +2576,7 @@ wss.on('connection', (socket) => {
     }
 
     if (msg.type === 'interrupt') {
+      cancelledAsk = answering
       quickAbort?.abort()
       // Held so the next question can wait for it rather than racing it.
       const stopped = turnFinished()
