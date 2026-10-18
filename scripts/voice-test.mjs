@@ -62,6 +62,25 @@ const cases = {
 let failures = 0
 let checks = 0
 
+// Her name, come back as a weekday.
+const WEEKDAY_AS_NAME = eval(source(voice, 'WEEKDAY_AS_NAME'))
+for (const [text, expected] of [
+  ['a sexta-feira, no dia de janeiro.', 'Wednesday, no dia de janeiro.'],
+  ['Ei, sexta-feira, qual é a hora?', 'Ei, Wednesday, qual é a hora?'],
+  ['Quarta-feira, toca uma música', 'Wednesday, toca uma música'],
+  ['quinta-feira!', 'Wednesday!'],
+  ['sexta-feira tem jogo do Flamengo', 'sexta-feira tem jogo do Flamengo'],
+  ['a reunião é na quarta-feira, às dez', 'a reunião é na quarta-feira, às dez'],
+  ['vou sexta-feira ao médico', 'vou sexta-feira ao médico'],
+]) {
+  checks++
+  const got = text.replace(WEEKDAY_AS_NAME, '$1Wednesday')
+  if (got !== expected) {
+    failures++
+    console.log(`weekday: ${JSON.stringify(text)} gave ${JSON.stringify(got)}, expected ${JSON.stringify(expected)}`)
+  }
+}
+
 // The media shortcuts: each phrase must reach the right key, and ordinary
 // sentences must reach none.
 const MEDIA_CMDS = eval(source(app, 'MEDIA_CMDS'))

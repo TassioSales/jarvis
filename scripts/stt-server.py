@@ -89,6 +89,8 @@ if os.path.exists(TURN_MODEL):
         turn_session = None
 
 
+NAME_HINT = os.environ.get("JARVIS_STT_HINT", "Wednesday, que horas são? Wednesday, toca uma música.")
+
 # ------------------------------------------------------------- whose voice
 #
 # CAM++ (3D-Speaker, Apache-2.0, via sherpa-onnx): a 192-number summary of a
@@ -188,6 +190,12 @@ def transcribe(audio: bytes, enrol=False):
             beam_size=1,
             vad_filter=True,
             condition_on_previous_text=False,
+            # Her name, as a hint. Without it, Whisper set to Portuguese hears
+            # the English word as the weekday and translates it — "Wednesday"
+            # came back "sexta-feira". A bare name in a prompt can make Whisper
+            # write it where nobody said it; tested on silence and room noise,
+            # this one did not.
+            initial_prompt=NAME_HINT,
         )
         return " ".join(s.text.strip() for s in segments).strip(), complete, likeness
 

@@ -96,6 +96,16 @@ const WAKE_DEBOUNCE = 1500
  */
 export const NAME_PATTERN =
   "(?:(?:w|u|v)[eéêi](?:d?n|nd?)(?:e|i)?[sz]d(?:a|e|ei|ey|ay|i|y)y?|d?j[aáeé]i?(?:r[vb][iíeay][szx]?s?|[vb][iíeay][szx]s?)|d[aá]r?v[eiy]s|ch[aá]r[vb]is|charles|james|jazz?|travis|java's|jarv)"
+/**
+ * Her name, translated. Whisper set to Portuguese sometimes hears the English
+ * "Wednesday" as the weekday and writes it in Portuguese — and not even the
+ * right one: "a sexta-feira, …". Only at the very start of what was said and
+ * followed by a pause, which is where a name is and a weekday rarely is:
+ * "sexta-feira tem jogo" is left alone.
+ */
+export const WEEKDAY_AS_NAME =
+  /^(\W*(?:(?:ei|oi|ô|hey|ah)[\s,]+)?)(?:a\s+|o\s+)?(?:segunda|ter[cç]a|quarta|quinta|sexta|tue)-?\s?feira(?=\s*(?:[,!.?]|$))/i
+
 export const HAIL_PATTERN = '(?:hey|hi|ok|okay|yo|ei|oi|olá|ola|ô|o)'
 
 const WAKE = new RegExp(
@@ -629,7 +639,11 @@ async function startElevenVoice(h: VoiceHandlers): Promise<Voice> {
       // The transcriber annotates what is not speech — "[ruído]", "(música)",
       // "[risos]". Those are a description of the room, not something anyone
       // said, and one of them reached the model as a question.
-      const said = (text ?? '').replace(/[[(][^\])]{0,40}[\])]/g, ' ').replace(/\s+/g, ' ').trim()
+      const said = (text ?? '')
+        .replace(/[[(][^\])]{0,40}[\])]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .replace(WEEKDAY_AS_NAME, '$1Wednesday')
       diag.lastError = ''
 
       if (!said) {
