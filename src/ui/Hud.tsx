@@ -7,6 +7,35 @@ import { Effects } from './Effects'
 import { Pointer } from './Pointer'
 import { GestureGuide } from './GestureGuide'
 import { t as tr } from '../lib/i18n'
+import { BRIDGE_HTTP_URL } from '../config'
+
+/**
+ * A bridge endpoint, read on a timer, for the rails. The main window keeps
+ * these to a glance — every service and its lamp, the machine in three
+ * numbers, the sky — and leaves the detail to the side monitors.
+ */
+function useBridge<T>(path: string, everyMs: number): T | null {
+  const [data, setData] = useState<T | null>(null)
+  useEffect(() => {
+    let gone = false
+    const read = () =>
+      fetch(`${BRIDGE_HTTP_URL}${path}`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => !gone && d && setData(d as T))
+        .catch(() => {})
+    void read()
+    const timer = setInterval(read, everyMs)
+    return () => {
+      gone = true
+      clearInterval(timer)
+    }
+  }, [path, everyMs])
+  return data
+}
+
+type RailStatus = { services: { id: string; label: string; state: 'ok' | 'warn' | 'down' | 'off'; detail: string }[] }
+type RailSystem = { cpu: { now: number }; mem: { used: number; total: number }; gpu: { util: number | null; temp: number | null } | null }
+type RailSky = { city: string; now: { temp: number; humidity: number } }
 
 const statusText: Record<Phase, string> = {
   offline: 'OFFLINE',
@@ -153,6 +182,9 @@ export function Hud() {
   const turns = useStore((s) => s.turns)
   const activeTool = useStore((s) => s.activeTool)
   const connected = useStore((s) => s.connected)
+  const railStatus = useBridge<RailStatus>('/status', 10_000)
+  const railSystem = useBridge<RailSystem>('/system', 4000)
+  const railSky = useBridge<RailSky>('/weather', 10 * 60_000)
   const error = useStore((s) => s.error)
   const level = useStore((s) => s.level)
   const voice = useStore((s) => s.voice)
@@ -193,7 +225,7 @@ export function Hud() {
         {ui.chrome.brand && (
           <div className="brand">
             <span className="brand-mark">WEDNESDAY</span>
-            <span className="brand-sub">Just A Rather Very Intelligent System</span>
+            <span className="brand-sub">{tr('Personal assistant · neural core')}</span>
           </div>
         )}
 
@@ -209,31 +241,45 @@ export function Hud() {
         </div>
       </header>
 
-      {/* Left rail: which integrations are live */}
+      {/* Left rail: every part of her, and whether it is working. */}
       {ui.chrome.systems && (
         <aside className="rail rail-left">
           <div className="rail-title">{tr('SYSTEMS')}</div>
-          {connected.length === 0 && <div className="rail-item dim">{tr('none linked')}</div>}
-          {connected.map((c) => (
-            <div key={c} className="rail-item">
+          {!railStatus && connected.length === 0 && <div className="rail-item dim">{tr('none linked')}</div>}
+          {(railStatus?.services ?? []).map((s) => (
+            <div key={s.id} className={`rail-item rail-svc rail-${s.state}`} title={s.detail}>
               <span className="tick" />
-              {c}
+              <span>{s.label}</span>
             </div>
           ))}
-          <div className="rail-item">
-            <span className="tick" />
-            Web
-          </div>
         </aside>
       )}
 
-      {/* Right rail: live telemetry, mostly for flavour */}
+      {/* Right rail: the microphone, and the machine and the sky at a glance. */}
       <aside className="rail rail-right">
         <div className="rail-title">{tr('SIGNAL')}</div>
         <div className="meter">
           <div className="meter-fill" style={{ height: `${level * 100}%` }} />
         </div>
         <div className="rail-item mono">{(level * 100).toFixed(0).padStart(3, '0')}%</div>
+        {railSystem && (
+          <>
+            <div className="rail-title rail-gap">{tr('MACHINE')}</div>
+            <div className="rail-item mono">CPU {String(Math.round(railSystem.cpu.now)).padStart(3, '0')}%</div>
+            <div className="rail-item mono">RAM {String(Math.round((railSystem.mem.used / railSystem.mem.total) * 100)).padStart(3, '0')}%</div>
+            {railSystem.gpu && (
+              <div className={`rail-item mono ${(railSystem.gpu.temp ?? 0) >= 80 ? 'rail-hot' : ''}`}>
+                GPU {String(railSystem.gpu.util ?? 0).padStart(3, '0')}% · {railSystem.gpu.temp ?? '—'}°C
+              </div>
+            )}
+          </>
+        )}
+        {railSky && (
+          <>
+            <div className="rail-title rail-gap">{railSky.city.toUpperCase()}</div>
+            <div className="rail-item mono">{Math.round(railSky.now.temp)}° · {Math.round(railSky.now.humidity)}%</div>
+          </>
+        )}
       </aside>
 
       <AnimatePresence>

@@ -99,6 +99,7 @@ const PT: Record<string, string> = {
   WORLD: 'MUNDO',
   OVERVIEW: 'PANORAMA',
   'LOCAL TIME': 'HORA LOCAL',
+  'Personal assistant · neural core': 'Assistente pessoal · núcleo neural',
   'THE DRIVE': 'TRAJETO',
   'to work': 'para o trabalho',
   home: 'para casa',

@@ -154,6 +154,15 @@ body::after {
   opacity: 0.82;
 }
 .rail-item.dim { opacity: 0.3; }
+.rail-gap { margin-top: 14px; }
+.rail-svc { letter-spacing: 0.08em; }
+.rail-ok .tick { background: #3dffb5; box-shadow: 0 0 8px #3dffb5; }
+.rail-warn .tick { background: #ffb347; box-shadow: 0 0 8px #ffb347; animation: rail-blink 1.6s steps(2) infinite; }
+.rail-down .tick { background: #ff4d6d; box-shadow: 0 0 10px #ff4d6d; animation: rail-blink 0.9s steps(2) infinite; }
+.rail-off { opacity: 0.38; }
+.rail-off .tick { background: rgb(214 244 250 / 0.4); box-shadow: none; }
+.rail-hot { color: #ffb347; }
+@keyframes rail-blink { 50% { opacity: 0.3; } }
 .rail-item.mono { font-family: 'JetBrains Mono', monospace; letter-spacing: 0.1em; }
 
 .tick {
