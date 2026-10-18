@@ -35,11 +35,23 @@ async function load() {
     const name = Object.values(data).find((v) => v?.type === 'VCALENDAR')?.['WR-CALNAME'] ?? ''
     for (const item of Object.values(data)) {
       if (item?.type !== 'VEVENT' || item.status === 'CANCELLED') continue
-      let instances = []
       try {
         instances = ical.expandRecurringEvent(item, { from, to })
       } catch {
         instances = []
+      }
+      if (!instances.length && item.start) {
+        const s = new Date(item.start)
+        const e = new Date(item.end ?? item.start)
+        if (s <= to && e >= from) {
+          instances = [{
+            summary: item.summary,
+            start: item.start,
+            end: item.end ?? item.start,
+            isFullDay: Boolean(item.datetype === 'date' || item.start?.dateOnly),
+            location: item.location,
+          }]
+        }
       }
       for (const e of instances) {
         events.push({
@@ -93,7 +105,7 @@ export function agendaNote() {
   const now = new Date()
   const tomorrow = new Date(now.getTime() + 86_400_000)
   const line = (e) =>
-    `- ${e.allDay ? 'all day' : new Date(e.start).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}: ${e.title}${e.location ? ` (${e.location})` : ''}`
+    `- ${e.allDay ? 'dia todo' : new Date(e.start).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}: ${e.title}${e.location ? ` (${e.location})` : ''}`
   const today = cache.events.filter((e) => sameDay(e.start, now) && (e.allDay || new Date(e.end) > now))
   const next = cache.events.filter((e) => sameDay(e.start, tomorrow))
   return (

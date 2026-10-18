@@ -4,6 +4,22 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { markets, weather } from './feeds.mjs'
 import { system } from './system.mjs'
 import { agendaNow } from './agenda.mjs'
+import { mapsReady, routeSummary } from './maps.mjs'
+
+const routeCache = new Map()
+async function cachedRoute(from, to) {
+  const k = `${from}::${to}`
+  const now = Date.now()
+  const hit = routeCache.get(k)
+  if (hit && now - hit.at < 10 * 60_000) return hit.val
+  try {
+    const val = await routeSummary(from, to)
+    routeCache.set(k, { at: now, val })
+    return val
+  } catch {
+    return null
+  }
+}
 
 /**
  * What she says without being asked.
@@ -51,9 +67,31 @@ async function candidates(now) {
   const out = []
 
   // A meeting about to start — the one alert that speaks at any hour.
+  const origin = process.env.JARVIS_HOME_ADDRESS?.trim()
   for (const e of agendaNow()) {
     if (e.allDay) continue
-    const mins = (new Date(e.start).getTime() - now.getTime()) / 60_000
+    const startMs = new Date(e.start).getTime()
+    const mins = (startMs - now.getTime()) / 60_000
+    if (mins < 0) continue
+
+    const loc = String(e.location ?? '').trim()
+    const isVirtual = !loc || /^(https?:\/\/|meet\.|zoom\.|teams\.)/i.test(loc)
+    if (!isVirtual && origin && mapsReady() && mins >= 15 && mins <= 120) {
+      const trip = await cachedRoute(origin, loc)
+      if (trip?.minutes) {
+        const leaveInMins = mins - trip.minutes - 5 // 5 min safety buffer
+        if (leaveInMins >= 5 && leaveInMins <= 15) {
+          const timeStr = new Date(e.start).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+          out.push({
+            key: `traffic:${e.title}:${e.start}`,
+            cooldown: 24 * HOUR,
+            always: true,
+            text: `Senhor, para chegar a ${e.title} às ${timeStr}, são ${trip.minutes} minutos de trajeto${trip.delay > 3 ? ` com ${trip.delay} minutos de lentidão no trânsito` : ''}. Recomendo se preparar para sair em ${Math.round(leaveInMins)} minutos.`,
+          })
+        }
+      }
+    }
+
     if (mins >= 9 && mins <= 16) {
       out.push({
         key: `meeting:${e.title}:${e.start}`,

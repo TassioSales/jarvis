@@ -6,6 +6,7 @@ import { BladeSweep, Blades } from './Blades'
 import { Effects } from './Effects'
 import { Pointer } from './Pointer'
 import { GestureGuide } from './GestureGuide'
+import { HoloRings } from './HoloRings'
 import { t as tr } from '../lib/i18n'
 import { BRIDGE_HTTP_URL } from '../config'
 
@@ -216,6 +217,7 @@ export function Hud() {
           `z-index: auto`, so paint order is document order and the sweep stays
           behind the transcript and the panels without a z-index war. */}
       <BladeSweep />
+      <HoloRings />
 
       <Corner at="tl" />
       <Corner at="tr" />

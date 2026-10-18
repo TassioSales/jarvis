@@ -34,6 +34,7 @@ const PT: Record<string, string> = {
   help: 'ajuda',
   'CAMERA ON · G TO STOP': 'CÂMERA LIGADA · G PARA PARAR',
   LOOKING: 'OLHANDO',
+  JOIN: 'ENTRAR',
 
   // Start gate
   INITIALISE: 'INICIAR',
@@ -76,6 +77,7 @@ const PT: Record<string, string> = {
   'There is no face on record, sir. Say: register my face.':
     'Não há rosto cadastrado, senhor. Diga: cadastrar meu rosto.',
   'Look at the camera, sir.': 'Olhe para a câmera, senhor.',
+  'VOICE BIOMETRICS': 'BIOMETRIA DE VOZ',
   'Voice recognition is not available on this machine, sir.':
     'O reconhecimento de voz não está disponível nesta máquina, senhor.',
   'I shall learn your voice, sir. For the next twenty seconds, talk normally, without saying my name. Begin.':

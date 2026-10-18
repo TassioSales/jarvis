@@ -382,13 +382,36 @@ def watch_parent():
 
 if __name__ == "__main__":
     watch_parent()
-    # Warm up once, so the first real question does not pay for loading kernels.
+    # Warm up models on startup so the first interaction has zero cold-start latency.
     try:
         import numpy
 
-        list(model.transcribe(numpy.zeros(16000, dtype="float32"), language=LANG)[0])
+        silence = numpy.zeros(16000, dtype="float32")
+        list(model.transcribe(silence, language=LANG)[0])
+        if turn_session is not None:
+            turn_complete(silence)
+        if speaker is not None:
+            voice_of(silence)
     except Exception:
         pass
+
+    # Pre-load Kokoro in the background if present, so the first local voice utterance is instant.
+    def preload_kokoro():
+        global kokoro
+        if os.path.exists(VOICE_MODEL) and os.path.exists(VOICE_BANK):
+            try:
+                with voice_lock:
+                    if kokoro is None:
+                        from kokoro_onnx import Kokoro
+
+                        kokoro = Kokoro(VOICE_MODEL, VOICE_BANK)
+            except Exception:
+                pass
+
+    import threading
+
+    threading.Thread(target=preload_kokoro, daemon=True).start()
+
     print(
         f"[stt] faster-whisper {MODEL} on {device}"
         + (", with end-of-turn detection" if turn_session else "")

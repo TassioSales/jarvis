@@ -449,6 +449,7 @@ export default function App() {
   const mute = async () => {
     const s = store.getState()
     if (s.muted) return
+    sfx.play('done')
     ++turn.current
     clearIdle()
     s.setPhase('speaking')
@@ -463,6 +464,7 @@ export default function App() {
   const unmute = async () => {
     const s = store.getState()
     if (!s.muted || !voiceHandlers.current) return
+    sfx.play('wake')
     s.setMuted(false)
     try {
       await startAnalyser()
@@ -496,7 +498,14 @@ export default function App() {
     if (mine !== turn.current) return
     setVoiceEnrolling(true)
     s.setPhase('listening')
+    const startEnrol = Date.now()
+    const enrolTimer = setInterval(() => {
+      const left = Math.max(0, Math.ceil((VOICE_ENROL_MS - (Date.now() - startEnrol)) / 1000))
+      store.getState().setCaption(`[ ${tr('VOICE BIOMETRICS')} // ${left}s ]`)
+    }, 400)
     await new Promise((r) => setTimeout(r, VOICE_ENROL_MS))
+    clearInterval(enrolTimer)
+    store.getState().setCaption('')
     setVoiceEnrolling(false)
     // The last clip may still be on its way to the helper.
     await new Promise((r) => setTimeout(r, 2500))

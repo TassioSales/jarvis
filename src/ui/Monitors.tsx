@@ -344,7 +344,23 @@ export function DayView() {
                   </b>
                   <span>
                     {e.title}
-                    {e.location && <small> · {e.location}</small>}
+                    {e.location && (
+                      <small>
+                        {' · '}
+                        {/^https?:\/\//i.test(e.location) || /(?:meet\.google|zoom\.us|teams\.microsoft)/i.test(e.location) ? (
+                          <a
+                            href={e.location.startsWith('http') ? e.location : `https://${e.location}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="hx-meet-link"
+                          >
+                            [ {t('JOIN')} ]
+                          </a>
+                        ) : (
+                          e.location
+                        )}
+                      </small>
+                    )}
                     {live && <small className="hx-tag"> {t('NOW')}</small>}
                   </span>
                 </li>

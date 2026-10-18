@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
 import {
   EffectComposer,
@@ -169,10 +169,12 @@ function Rig() {
     const want = Math.max(level, breathe)
     drive.level += (want - drive.level) * Math.min(1, dt * 9)
 
-    // Slow drift on the camera keeps handheld-ish life in the shot.
+    // Slow drift + mouse parallax gives real 3D holographic depth.
     const t = state.clock.elapsedTime
-    state.camera.position.x = Math.sin(t * 0.13) * 0.35
-    state.camera.position.y = Math.cos(t * 0.17) * 0.22
+    const targetX = Math.sin(t * 0.13) * 0.22 + state.pointer.x * 0.65
+    const targetY = Math.cos(t * 0.17) * 0.16 + state.pointer.y * 0.42
+    state.camera.position.x += (targetX - state.camera.position.x) * Math.min(1, dt * 4.0)
+    state.camera.position.y += (targetY - state.camera.position.y) * Math.min(1, dt * 4.0)
     state.camera.lookAt(0, 0, 0)
   })
 
@@ -193,12 +195,20 @@ function Rig() {
 }
 
 export function Scene() {
+  const [visible, setVisible] = useState(() => (typeof document !== 'undefined' ? !document.hidden : true))
+  useEffect(() => {
+    const onVis = () => setVisible(!document.hidden)
+    document.addEventListener('visibilitychange', onVis)
+    return () => document.removeEventListener('visibilitychange', onVis)
+  }, [])
+
   return (
     <Canvas
       className="scene"
       camera={{ position: [0, 0, 6.2], fov: 45 }}
-      gl={{ antialias: true, alpha: true }}
-      dpr={[1, 2]}
+      gl={{ antialias: true, alpha: true, powerPreference: 'high-performance' }}
+      dpr={[1, 1.5]}
+      frameloop={visible ? 'always' : 'never'}
     >
       <Rig />
       {/*

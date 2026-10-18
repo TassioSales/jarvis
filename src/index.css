@@ -23,7 +23,7 @@ body,
   overflow: hidden;
 }
 
-/* Faint scanlines + radial falloff so the 3D never sits on flat black. */
+/* Holographic blueprint grid + scanlines + ambient vignette */
 body::after {
   content: '';
   position: fixed;
@@ -31,14 +31,17 @@ body::after {
   pointer-events: none;
   z-index: 5;
   background:
-    radial-gradient(ellipse at center, transparent 30%, rgba(0, 0, 0, 0.55) 100%),
+    radial-gradient(circle at center, rgba(0, 229, 255, 0.05) 0%, transparent 65%),
+    radial-gradient(ellipse at center, transparent 35%, rgba(0, 0, 0, 0.65) 100%),
     repeating-linear-gradient(
       0deg,
-      rgba(0, 229, 255, 0.028) 0px,
-      rgba(0, 229, 255, 0.028) 1px,
+      rgba(0, 229, 255, 0.024) 0px,
+      rgba(0, 229, 255, 0.024) 1px,
       transparent 1px,
       transparent 3px
-    );
+    ),
+    linear-gradient(90deg, rgba(0, 229, 255, 0.018) 1px, transparent 1px) 0 0 / 60px 60px,
+    linear-gradient(0deg, rgba(0, 229, 255, 0.018) 1px, transparent 1px) 0 0 / 60px 60px;
 }
 
 .scene {
@@ -1935,4 +1938,133 @@ kbd {
   cursor: pointer;
   animation: rail-blink 1.6s steps(2) infinite;
   z-index: 5;
+}
+
+/* ----------------------------------------------------------- Holo Reticles */
+
+.holo-rings-wrap {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(88vmin, 680px);
+  height: min(88vmin, 680px);
+  pointer-events: none;
+  z-index: 2;
+  transition: opacity 800ms ease, filter 800ms ease;
+}
+
+.holo-off {
+  opacity: 0.15;
+  filter: grayscale(80%) brightness(0.6);
+}
+
+.holo-rings {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.holo-spin-cw {
+  transform-origin: center;
+  animation: holo-spin-cw 60s linear infinite;
+}
+
+.holo-spin-ccw {
+  transform-origin: center;
+  animation: holo-spin-ccw 45s linear infinite;
+}
+
+@keyframes holo-spin-cw {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes holo-spin-ccw {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(-360deg); }
+}
+
+.holo-ring-outer {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 0.85;
+  opacity: 0.42;
+  filter: drop-shadow(0 0 3px color-mix(in srgb, var(--accent) 50%, transparent));
+}
+
+.holo-ring-outer-dash {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.2;
+  stroke-dasharray: 4 12;
+  opacity: 0.28;
+}
+
+.holo-tick {
+  stroke: var(--accent);
+  stroke-width: 0.75;
+  opacity: 0.4;
+}
+
+.holo-tick-major {
+  stroke-width: 1.5;
+  opacity: 0.85;
+  filter: drop-shadow(0 0 4px var(--accent));
+}
+
+.holo-text-deg {
+  fill: var(--accent);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 7.5px;
+  letter-spacing: 0.08em;
+  opacity: 0.55;
+}
+
+.holo-ring-mid {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 0.8;
+  opacity: 0.35;
+}
+
+.holo-ring-mid-dash {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.5;
+  stroke-dasharray: 18 24 3 12;
+  opacity: 0.5;
+  filter: drop-shadow(0 0 3px color-mix(in srgb, var(--accent) 60%, transparent));
+}
+
+.holo-bracket {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  opacity: 0.85;
+  filter: drop-shadow(0 0 5px var(--accent));
+}
+
+.holo-waveform {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.6;
+  opacity: 0.88;
+  filter: drop-shadow(0 0 6px var(--accent));
+}
+
+.holo-reticle-cross {
+  stroke: var(--accent);
+  stroke-width: 1.4;
+  opacity: 0.65;
+  filter: drop-shadow(0 0 3px var(--accent));
+}
+
+.holo-spec {
+  fill: var(--accent);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 8px;
+  letter-spacing: 0.18em;
+  opacity: 0.5;
 }
