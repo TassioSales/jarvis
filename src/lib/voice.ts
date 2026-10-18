@@ -95,7 +95,7 @@ const WAKE_DEBOUNCE = 1500
  * one first. The handful that do not fit the shape are listed after it.
  */
 export const NAME_PATTERN =
-  "(?:d?j[aáeé]i?(?:r[vb][iíeay][szx]?s?|[vb][iíeay][szx]s?)|d[aá]r?v[eiy]s|ch[aá]r[vb]is|charles|james|jazz?|travis|java's|jarv)"
+  "(?:(?:w|u|v)[eéêi](?:d?n|nd?)(?:e|i)?[sz]d(?:a|e|ei|ey|ay|i|y)y?|d?j[aáeé]i?(?:r[vb][iíeay][szx]?s?|[vb][iíeay][szx]s?)|d[aá]r?v[eiy]s|ch[aá]r[vb]is|charles|james|jazz?|travis|java's|jarv)"
 export const HAIL_PATTERN = '(?:hey|hi|ok|okay|yo|ei|oi|olá|ola|ô|o)'
 
 const WAKE = new RegExp(

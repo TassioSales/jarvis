@@ -209,8 +209,10 @@ function score(v: SpeechSynthesisVoice): number {
 }
 
 /** Male voice names per language, for the systems that ship more than one. */
+// The voice preferred among the system's: a woman's, now that she is
+// Wednesday. (Named MALE for history; it is simply the preferred voice.)
 const LOCAL_MALE: Record<string, RegExp> = {
-  pt: /\b(antonio|antônio|daniel|duarte|francisco|julio|júlio|fabio|fábio|donato|humberto|nicolau|valerio|valério)\b/,
+  pt: /\b(francisca|thalita|brenda|leila|yara|giovanna|manuela|elza|leticia|letícia|raquel|maria)\b/,
 }
 
 /**

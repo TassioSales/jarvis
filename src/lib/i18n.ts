@@ -13,7 +13,7 @@ const PT: Record<string, string> = {
   // Status line
   OFFLINE: 'DESLIGADO',
   INITIALISING: 'INICIALIZANDO',
-  'STANDBY — SAY “HEY JARVIS”': 'EM ESPERA — DIGA “JARVIS”',
+  'STANDBY — SAY “HEY JARVIS”': 'EM ESPERA — DIGA “WEDNESDAY”',
   ONLINE: 'ATIVO',
   LISTENING: 'OUVINDO',
   PROCESSING: 'PROCESSANDO',
@@ -26,7 +26,7 @@ const PT: Record<string, string> = {
   SIGNAL: 'SINAL',
   YOU: 'VOCÊ',
   say: 'diga',
-  '“hey jarvis”': '“jarvis”',
+  '“hey jarvis”': '“wednesday”',
   'to talk': 'para falar',
   hands: 'mãos',
   face: 'rosto',

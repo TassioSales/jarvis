@@ -344,7 +344,7 @@ function Dashboard({ state }: { state: Snapshot }) {
         </div>
       </Card>
 
-      <Card className="sat-jarvis" title="J.A.R.V.I.S.">
+      <Card className="sat-jarvis" title="WEDNESDAY">
         <PhaseLine state={state} />
         <div className="sat-stats sat-stats-2">
           <Stat label={t('MODEL')} value={machine?.model.replace(/^claude-/, '') ?? '—'} />
@@ -487,7 +487,7 @@ function Log({ state }: { state: Snapshot }) {
           )}
           {state.turns.map((turn) => (
             <p key={turn.id} className={`sat-line sat-line-${turn.role}`}>
-              <b>{turn.role === 'user' ? t('YOU') : 'JARVIS'}</b>
+              <b>{turn.role === 'user' ? t('YOU') : 'WEDNESDAY'}</b>
               {turn.text}
             </p>
           ))}
@@ -536,7 +536,7 @@ export function Satellite({ kind }: { kind: SatelliteKind }) {
   // opening a duplicate next time.
   const slot = new URLSearchParams(location.search).get('slot') ?? (kind === 'telemetry' ? 'A' : 'B')
   useEffect(() => {
-    document.title = `J.A.R.V.I.S. · ${slot}`
+    document.title = `WEDNESDAY · ${slot}`
     return follow(setState)
   }, [slot])
 

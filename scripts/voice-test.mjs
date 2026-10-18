@@ -36,8 +36,8 @@ void NAME
 
 const cases = {
   WAKE: {
-    yes: ['Jarvis', 'jarvis, que horas são?', 'Ei, Jarvis', 'Jarves', 'Jarvez', 'Jarviz', 'Jarbis', 'Javis', 'Jervis', 'Jairvis', 'Djarvis', 'Járvis', 'Jarbas', 'Charvis', 'Travis', 'ô Jarvis', 'Oi Jarvis, bom dia', 'Daves', 'Dávis', 'Charles', 'Jaz', 'James, Spotify já tá ativo', 'Tá pensando, seu Java?', 'Java'],
-    no: ['já vi esse filme', 'a jarra está cheia', 'vou viajar amanhã', 'que horas são', 'chaves do carro', 'o javali', 'java é uma linguagem', 'jardim', 'a televisão está alta', 'serviço', 'devo ir'],
+    yes: ['Jarvis', 'jarvis, que horas são?', 'Ei, Jarvis', 'Jarves', 'Jarvez', 'Jarviz', 'Jarbis', 'Javis', 'Jervis', 'Jairvis', 'Djarvis', 'Járvis', 'Jarbas', 'Charvis', 'Travis', 'ô Jarvis', 'Oi Jarvis, bom dia', 'Daves', 'Dávis', 'Charles', 'Jaz', 'James, Spotify já tá ativo', 'Tá pensando, seu Java?', 'Java', 'Wednesday', 'Wednesday, que horas são?', 'Winsdy, toca uma música', 'Ei Wensday', 'Uênsdei', 'oi Wendsday', 'Wednesdey'],
+    no: ['já vi esse filme', 'a jarra está cheia', 'vou viajar amanhã', 'que horas são', 'chaves do carro', 'o javali', 'java é uma linguagem', 'jardim', 'a televisão está alta', 'serviço', 'devo ir', 'as vendas de quarta', 'o castelo de Windsor', 'quarta-feira tem reunião', 'vende sabão'],
   },
   GREETING: {
     yes: ['Bom dia.', 'Boa tarde', 'boa noite, senhor', 'Good morning'],
