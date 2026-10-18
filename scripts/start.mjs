@@ -98,7 +98,7 @@ const paint = (tag, colour) => (line) =>
 
 const children = []
 
-function run(name, command, args, colour, env) {
+function run(name, command, args, colour, env, optional = false) {
   const label = paint(name, colour)
   const child = spawn(command, args, {
     env: { ...process.env, ...env },
@@ -106,7 +106,14 @@ function run(name, command, args, colour, env) {
   })
   child.stdout.on('data', (d) => process.stdout.write(label(d) + '\n'))
   child.stderr.on('data', (d) => process.stderr.write(label(d) + '\n'))
+  child.on('error', (err) => console.log(`[${colour}m${name}[0m could not start: ${err.message}`))
   child.on('exit', (code) => {
+    // A helper that is only an improvement — local hearing — going away
+    // leaves the rest working, so it does not take them down with it.
+    if (optional) {
+      console.log(`[${colour}m${name}[0m exited (${code}); carrying on without it.`)
+      return
+    }
     // If either half dies the other is useless, so take the whole thing down
     // rather than leave a half-running app that looks alive but cannot answer.
     console.log(`\x1b[${colour}m${name}\x1b[0m exited (${code}); stopping the rest.`)
@@ -162,6 +169,13 @@ run('bridge', 'node', ['bridge/server.mjs'], '36', bridgeEnv)
 // npm is a shell script on most systems; call the vite binary directly so we do
 // not need shell:true (which would break the argument handling above).
 run('face', process.execPath, ['node_modules/vite/bin/vite.js'], '35', {})
+
+// Local hearing, when its Python environment has been set up (see
+// scripts/stt-server.py). Without it the bridge simply uses the cloud.
+const sttPython = process.platform === 'win32' ? '.venv-stt/Scripts/python.exe' : '.venv-stt/bin/python'
+if (existsSync(sttPython) && process.env.JARVIS_STT_LOCAL !== '0') {
+  run('ears', sttPython, ['scripts/stt-server.py'], '33', { JARVIS_PARENT_PID: String(process.pid), PYTHONIOENCODING: 'utf-8' }, true)
+}
 
 console.log(
   '\nWhen it says the dev server is ready, open the URL it prints in Chrome,\n' +

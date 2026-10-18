@@ -27,3 +27,5 @@ dist-ssr
 public/mediapipe/
 # Likewise — the face-recognition weights, 7MB.
 public/faceapi/
+.venv-stt/
+__pycache__/

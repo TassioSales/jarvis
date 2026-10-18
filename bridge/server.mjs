@@ -221,7 +221,34 @@ function configuredServers() {
   }
 }
 
-const MCP_SERVERS = configuredServers()
+/**
+ * The house, when there is one to talk to. Nothing here exists until its
+ * address is in .env.local, so a flat with no smart plugs pays nothing.
+ *
+ *   HOME_ASSISTANT_URL=http://homeassistant.local:8123   (and)
+ *   HOME_ASSISTANT_TOKEN=<long-lived token>   Profile → Security in Home Assistant,
+ *     with the "Model Context Protocol Server" integration added.
+ *   EWELINK_MCP_URL=<the URL from the eWeLink app>   Profile → Pilot Features →
+ *     MCP Server. EWELINK_MCP_TYPE=sse if it says SSE.
+ *
+ * Switching things is write-class like any other action, so it goes through
+ * the consent card unless named in JARVIS_HOME_TRUSTED (see decideTool).
+ */
+function homeServers() {
+  const out = {}
+  const ha = process.env.HOME_ASSISTANT_URL?.trim().replace(/\/+$/, '')
+  const haToken = process.env.HOME_ASSISTANT_TOKEN?.trim()
+  if (ha && haToken) {
+    out.casa = { type: 'http', url: `${ha}/api/mcp`, headers: { Authorization: `Bearer ${haToken}` } }
+  }
+  const ewe = process.env.EWELINK_MCP_URL?.trim()
+  if (ewe) {
+    out.casa_ewelink = { type: process.env.EWELINK_MCP_TYPE === 'sse' ? 'sse' : 'http', url: ewe }
+  }
+  return out
+}
+
+const MCP_SERVERS = { ...configuredServers(), ...homeServers() }
 
 /** MCP tools arrive as `mcp__<server>__<tool>`. */
 const mcpServerOf = (toolName) =>
@@ -344,6 +371,16 @@ function decide(name, writes) {
     // Everything else here opens something, and is asked about first.
     // Maps only read.
     if (server === 'jarvis_maps') return true
+
+    // The house. Looking at it is free. Switching asks, unless the user has
+    // said that switching is something they never want to be asked about —
+    // "acende a luz" answered with "devo prosseguir?" gets old by the second
+    // evening — by setting JARVIS_HOME_TRUSTED=1.
+    if (server === 'casa' || server === 'casa_ewelink') {
+      const t = mcpToolOf(name)
+      if (/^(GetLiveContext|get|list|search|read|query|status|describe)/i.test(t)) return true
+      return process.env.JARVIS_HOME_TRUSTED === '1' ? true : writes
+    }
 
     if (server === 'jarvis_do') {
       return /^(media|play|now_playing|list_routines|save_routine|delete_routine)$/.test(mcpToolOf(name))
@@ -587,6 +624,13 @@ The machine:
   a named routine; \`save_routine\` defines one when they describe it ("work
   mode opens these three"). Prefer these to the shell for opening things.
 
+The house:
+- Lights, plugs and switches are reached through the tools of the \`casa\` or
+  \`casa_ewelink\` servers, when they exist. "Acende a luz da sala": find the
+  device by its name among what the house reports, then switch it. Do it and
+  confirm in a few words ("Luz da sala acesa, senhor."). If there are no such
+  tools, say plainly that no house is connected yet.
+
 Getting somewhere:
 - For traffic, a route, a travel time or a place, use \`route\` and \`find_place\`
   (TomTom) when you have them. "How is the traffic to work" needs two addresses:
@@ -700,6 +744,35 @@ function elevenKey() {
     )
     return cfg.mcpServers?.elevenlabs?.env?.ELEVENLABS_API_KEY ?? null
   } catch {
+    return null
+  }
+}
+
+/**
+ * The local transcriber (scripts/stt-server.py), which start.mjs runs when
+ * its Python environment exists. When it does not answer it is left alone
+ * for half a minute, so a machine without it pays nothing per clip.
+ */
+const EARS_URL = `http://127.0.0.1:${process.env.JARVIS_STT_PORT ?? 8790}`
+let earsDownUntil = 0
+let earsSeen = false
+const localEarsUp = () => earsSeen && Date.now() >= earsDownUntil
+
+async function localEars(audio, type) {
+  if (process.env.JARVIS_STT_LOCAL === '0' || Date.now() < earsDownUntil) return null
+  try {
+    const res = await fetch(`${EARS_URL}/stt`, {
+      method: 'POST',
+      headers: { 'content-type': type },
+      body: audio,
+      signal: AbortSignal.timeout(8000),
+    })
+    if (!res.ok) throw new Error(`http ${res.status}`)
+    const data = await res.json()
+    earsSeen = true
+    return String(data.text ?? '').trim()
+  } catch {
+    earsDownUntil = Date.now() + 30_000
     return null
   }
 }
@@ -954,7 +1027,7 @@ const handleRequest = async (req, res) => {
     // student with nothing configured still has a working assistant.
     const eleven = Boolean(elevenKey())
     res.writeHead(200, { ...cors, 'content-type': 'application/json' })
-    return res.end(JSON.stringify({ ok: true, tts: eleven, stt: eleven }))
+    return res.end(JSON.stringify({ ok: true, tts: eleven, stt: eleven || geminiReady() || localEarsUp() }))
   }
 
   // What the telemetry monitor shows: the machine's vitals, how the brain is
@@ -1263,9 +1336,9 @@ const handleRequest = async (req, res) => {
   // touches this endpoint; this is only for the words.
   if (req.method === 'POST' && req.url === '/stt') {
     const key = elevenKey()
-    if (!key && !geminiReady()) {
+    if (!key && !geminiReady() && !localEarsUp()) {
       res.writeHead(503, cors)
-      return res.end('no elevenlabs key')
+      return res.end('nothing to transcribe with')
     }
 
     const type = req.headers['content-type'] || 'audio/webm'
@@ -1304,7 +1377,19 @@ const handleRequest = async (req, res) => {
       res.end(JSON.stringify({ text: heard, by: 'gemini' }))
       return true
     }
+    // Hearing on this machine comes first: no allowance, no round trip to
+    // anyone. The cloud services below are only the fallback.
+    const local = await localEars(Buffer.concat(chunks), type)
+    if (local !== null) {
+      res.writeHead(200, { ...cors, 'content-type': 'application/json' })
+      return res.end(JSON.stringify({ text: local, by: 'local' }))
+    }
+
     if ((!key || Date.now() < sttRestUntil) && geminiReady() && (await viaGemini())) return
+    if (!key) {
+      res.writeHead(503, cors)
+      return res.end('nothing to transcribe with')
+    }
 
     try {
       // The filename extension is the only hint Scribe gets about the codec, so
