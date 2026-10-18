@@ -47,7 +47,7 @@ import { appendFileSync, mkdirSync, readFileSync, readdirSync, realpathSync, sta
 import { readFile, realpath, stat } from 'node:fs/promises'
 import { isAbsolute, join, relative, resolve as resolvePath } from 'node:path'
 import { openRemote, proxyError, vetTarget, PROXY_UA } from './net.mjs'
-import { probeUrl, renderPage } from './page.mjs'
+import { renderPage } from './page.mjs'
 
 /**
  * Do not outlive the launcher.
@@ -1687,7 +1687,7 @@ async function statusReport() {
         id: 'learn',
         label: 'Aprendizagem',
         state: process.env.JARVIS_LEARN === '0' ? 'off' : 'ok',
-        detail: `${learned.habits} hábitos · ${learned.facts} fatos`,
+        detail: `${learned.habits} ${learned.habits === 1 ? 'hábito' : 'hábitos'} · ${learned.facts} ${learned.facts === 1 ? 'fato' : 'fatos'}`,
       },
     ],
     stats: { since: stats.since, answers: stats.answers, heard: stats.heard, spoken: stats.spoken, sttAvg },

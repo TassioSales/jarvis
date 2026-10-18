@@ -507,7 +507,8 @@ export function createSpeaker(opts: { local?: boolean } = {}): Speaker {
         diag.engine = 'elevenlabs'
         console.warn('[jarvis] system voice is not producing sound — using the bridge speech proxy from here on')
       }
-      const rescue = await fetchCloudAudio(item.text).catch(() => null)
+      let rescue = await fetchCloudAudio(item.text).catch(() => null)
+      if (!rescue) rescue = await fetchCloudAudio(item.text, true).catch(() => null)
       if (rescue && !cancelled) {
         diag.rescued++
         await playUrl(rescue, item.text)
@@ -797,7 +798,7 @@ export function createSpeaker(opts: { local?: boolean } = {}): Speaker {
 /** Only used when USE_ELEVENLABS is on. Bridge proxy first (it already holds
  *  the key), then a direct key, then null to fall back to the native voice. */
 async function fetchCloudAudio(text: string, local = false): Promise<string | null> {
-  if (Date.now() < cloudRestUntil) return null
+  if (!local && Date.now() < cloudRestUntil) return null
   if (BACKEND === 'bridge') {
     try {
       const res = await fetch(`${BRIDGE_HTTP_URL}/tts`, {
