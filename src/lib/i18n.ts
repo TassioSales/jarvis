@@ -103,6 +103,8 @@ const PT: Record<string, string> = {
   'LOCAL TIME': 'HORA LOCAL',
   'answers today': 'respostas hoje',
   'diary days': 'dias no diário',
+  'NETWORK · PHONE': 'REDE · CELULAR',
+  'scan to pair': 'escaneie para parear',
   quick: 'rápido',
   'typical wait': 'espera típica',
   'API-equivalent cost': 'custo equivalente na API',

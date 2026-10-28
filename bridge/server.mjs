@@ -42,6 +42,7 @@ import { dueAlert } from './watch.mjs'
 import { recordTrace, traceSummary } from './traces.mjs'
 import { catchUp, DIARY_DIR, diaryNote, diaryServer, diaryTick, logTurn } from './diary.mjs'
 import { localModel, localQuick, localReady, localReadyNow, warmLocal } from './local.mjs'
+import { mobileInfo, pushFeed, startMobile } from './mobile.mjs'
 import { control, doServer, mediaSession, routineSteps } from './doer.mjs'
 import { mapsReady, mapsServer, routeSummary } from './maps.mjs'
 import { dueOffer, habits, habitsNote, learnFromConversation, learnServer, recordAction } from './learn.mjs'
@@ -1161,6 +1162,13 @@ const handleRequest = async (req, res) => {
   // What the telemetry monitor shows: the machine's vitals, how the brain is
   // configured, and what he has been told to remember. Read-only, and behind
   // the same origin check as everything else here — the facts are personal.
+  // The core monitor: how to pair a phone (the QR carries the key, so this
+  // answers on loopback, to the HUD's origin, like everything else here).
+  if (req.method === 'GET' && req.url === '/mobile') {
+    res.writeHead(200, { ...cors, 'content-type': 'application/json', 'cache-control': 'no-store' })
+    return res.end(JSON.stringify(await mobileInfo()))
+  }
+
   // The core monitor: the machine in full.
   if (req.method === 'GET' && req.url === '/system') {
     res.writeHead(200, { ...cors, 'content-type': 'application/json', 'cache-control': 'no-store' })
@@ -1909,6 +1917,8 @@ const RESULT_FAILURES = {
  */
 let lastAlertCheck = 0
 warmGemini()
+// The phone page, on the home network, for paired phones only (mobile.mjs).
+startMobile()
 void warmLocal()
 // Yesterday's page, if the machine was off at 23:30.
 void catchUp()
@@ -1922,6 +1932,7 @@ setInterval(() => {
   if (!open.length) return
   for (const r of dueReminders()) {
     console.log(`[jarvis] reminder due: ${r.briefing ? 'the briefing' : r.id}`)
+    if (!r.briefing) pushFeed(r.text)
     for (const client of open) {
       client.send(JSON.stringify({ type: 'reminder', text: r.text, briefing: r.briefing }))
     }
@@ -1935,6 +1946,7 @@ setInterval(() => {
       .then((text) => {
         if (!text) return
         console.log(`[jarvis] alert: ${text}`)
+        pushFeed(text)
         for (const client of [...wss.clients].filter((c) => c.readyState === c.OPEN)) {
           client.send(JSON.stringify({ type: 'reminder', text, briefing: false }))
         }

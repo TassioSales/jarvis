@@ -608,6 +608,9 @@ const PHASE: Record<Snapshot['phase'], string> = {
 
 export function CoreView({ state }: { state: Snapshot }) {
   const status = usePoll<Status>('/status', 5000)
+  // The phone page's pairing code (bridge/mobile.mjs). The SVG is made by the
+  // bridge from its own key — nothing from outside is rendered here.
+  const phone = usePoll<{ enabled: boolean; address?: string; qr?: string }>('/mobile', 5 * 60_000)
   const sys = usePoll<System>('/system', 3000)
   const end = useRef<HTMLDivElement>(null)
   const last = state.turns.at(-1)
@@ -811,8 +814,14 @@ export function CoreView({ state }: { state: Snapshot }) {
         )}
       </Frame>
 
-      <Frame className="hx-net" code="09" title={t('NETWORK')}>
-        <div className="hx-net-body">
+      <Frame className="hx-net" code="09" title={phone?.qr ? t('NETWORK · PHONE') : t('NETWORK')}>
+        <div className={`hx-net-body ${phone?.qr ? 'has-phone' : ''}`}>
+          {phone?.qr && (
+            <figure className="hx-phone" title={phone.address}>
+              <span dangerouslySetInnerHTML={{ __html: phone.qr }} />
+              <figcaption>{t('scan to pair')}</figcaption>
+            </figure>
+          )}
           <div>
             <span>▼ {t('down')}</span>
             <b>{bytes(sys?.net?.down, '/s')}</b>
