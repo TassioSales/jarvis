@@ -101,6 +101,12 @@ const PT: Record<string, string> = {
   WORLD: 'MUNDO',
   OVERVIEW: 'PANORAMA',
   'LOCAL TIME': 'HORA LOCAL',
+  'answers today': 'respostas hoje',
+  quick: 'rápido',
+  'typical wait': 'espera típica',
+  'API-equivalent cost': 'custo equivalente na API',
+  '30 days': '30 dias',
+  'saved by the quick brain': 'economizado pelo cérebro rápido',
   'Microphone off, sir. Press M when you want me back.':
     'Microfone desligado, senhor. Aperte M quando quiser que eu volte.',
   'Microphone on, sir.': 'Microfone ligado, senhor.',

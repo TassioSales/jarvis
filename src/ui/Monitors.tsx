@@ -63,6 +63,18 @@ type Status = {
     heard: { local: number; elevenlabs: number; gemini: number }
     sttAvg: number | null
   }
+  /** From the per-answer traces (bridge/traces.mjs). */
+  traces?: { today: TraceDay; month: TraceDay }
+}
+type TraceDay = {
+  answers: number
+  claude: number
+  quick: number
+  cost: number
+  saved: number
+  msClaude: number | null
+  msQuick: number | null
+  tools: number
 }
 type System = {
   host: string
@@ -109,6 +121,8 @@ function useClock(everyMs = 1000) {
 }
 
 const deg = (n: number) => `${Math.round(n)}°`
+const secs = (ms: number | null | undefined) => (ms == null ? '—' : `${(ms / 1000).toFixed(1)} s`)
+const usd = (n: number | null | undefined) => (n == null ? '—' : `US$ ${n.toFixed(n < 1 ? 3 : 2)}`)
 const hour = (iso: string) => `${iso.slice(11, 13)}h`
 const pad = (n: number) => String(n).padStart(2, '0')
 
@@ -603,16 +617,37 @@ export function CoreView({ state }: { state: Snapshot }) {
           <div className="hx-reactor-text">
             <strong>{t(PHASE[state.phase])}</strong>
             <span>{state.activeTool ?? t('no tool in use')}</span>
-            <dl className="hx-facts hx-facts-1">
+            <dl className="hx-facts">
               <div>
-                <dt>{t('answers')}</dt>
+                <dt>{t('answers today')}</dt>
                 <dd>
-                  {answers} <small>· Claude {status?.stats.answers.claude ?? 0} · Gemini {status?.stats.answers.gemini ?? 0}</small>
+                  {status?.traces?.today.answers ?? answers}
+                  <small> · {t('quick')} {status?.traces?.today.quick ?? status?.stats.answers.gemini ?? 0} · Claude {status?.traces?.today.claude ?? status?.stats.answers.claude ?? 0}</small>
+                </dd>
+                {status?.traces && status.traces.today.answers > 0 && (
+                  <Segments value={status.traces.today.quick} max={status.traces.today.answers} n={14} />
+                )}
+              </div>
+              <div>
+                <dt>{t('typical wait')}</dt>
+                <dd>
+                  {secs(status?.traces?.month.msQuick)}
+                  <small> {t('quick')} · {secs(status?.traces?.month.msClaude)} Claude</small>
                 </dd>
               </div>
               <div>
-                <dt>{t('effort')}</dt>
-                <dd>{status?.effort ?? '—'}</dd>
+                <dt>{t('API-equivalent cost')}</dt>
+                <dd>
+                  {usd(status?.traces?.today.cost)}
+                  <small> {t('today')} · {usd(status?.traces?.month.cost)} {t('30 days')}</small>
+                </dd>
+              </div>
+              <div>
+                <dt>{t('saved by the quick brain')}</dt>
+                <dd className="hx-saved">
+                  ~{usd(status?.traces?.month.saved)}
+                  <small> {t('30 days')}</small>
+                </dd>
               </div>
             </dl>
           </div>

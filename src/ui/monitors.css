@@ -1320,3 +1320,7 @@
 .hx-ears .hx-facts dd {
   font-size: clamp(12px, 1.6vmin, 19px);
 }
+
+.hx-saved {
+  color: var(--lamp-ok) !important;
+}

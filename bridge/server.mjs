@@ -39,6 +39,7 @@ import { dueReminders, listReminders } from './reminders.mjs'
 import { system } from './system.mjs'
 import { agenda, agendaNote, agendaReady } from './agenda.mjs'
 import { dueAlert } from './watch.mjs'
+import { recordTrace, traceSummary } from './traces.mjs'
 import { control, doServer, mediaSession, routineSteps } from './doer.mjs'
 import { mapsReady, mapsServer, routeSummary } from './maps.mjs'
 import { dueOffer, habits, habitsNote, learnFromConversation, learnServer, recordAction } from './learn.mjs'
@@ -1712,6 +1713,7 @@ async function statusReport() {
       },
     ],
     stats: { since: stats.since, answers: stats.answers, heard: stats.heard, spoken: stats.spoken, sttAvg },
+    traces: traceSummary(),
   }
 }
 
@@ -2001,6 +2003,9 @@ wss.on('connection', (socket) => {
   const recent = []
   let aside = []
   let lastQuestion = ''
+  // For the trace of the turn in flight: when it was asked, what tools ran.
+  let askedAt = 0
+  let turnTools = []
   let lastForDisplay = false
   let quickAbort = null
   // Everything said since he last read the conversation back for things to
@@ -2133,6 +2138,7 @@ wss.on('connection', (socket) => {
   const SETTLE_CAP_MS = 400
 
   const announceTool = (id, name) => {
+    if (name && !turnTools.includes(name)) turnTools.push(name)
     if (!name || (id && seenTools.has(id))) return
     if (id) seenTools.add(id)
     // The display tool isn't work being done, it's the HUD drawing itself —
@@ -2423,6 +2429,7 @@ wss.on('connection', (socket) => {
               note('model', understudy)
               sendTurn({ type: 'text', delta: understudy })
               stats.answers.gemini++
+              recordTrace({ brain: 'standin', ms: Date.now() - askedAt, costUsd: 0, chars: lastQuestion.length })
               sendTurn({ type: 'done', text: understudy, costUsd: msg.total_cost_usd ?? null, brain: 'gemini' })
             } else if (priming) {
               // The warm-up is over, however it ended. Cleared here as well as
@@ -2432,6 +2439,15 @@ wss.on('connection', (socket) => {
             } else if (msg.subtype === 'success') {
               if (!lastForDisplay && msg.result) note('model', msg.result)
               stats.answers.claude++
+              if (!lastForDisplay && askedAt) {
+                recordTrace({
+                  brain: 'claude',
+                  ms: Date.now() - askedAt,
+                  costUsd: msg.total_cost_usd ?? null,
+                  tools: turnTools,
+                  chars: lastQuestion.length,
+                })
+              }
               sendTurn({
                 type: 'done',
                 text: NOT_LOGGED_IN.test(msg.result ?? '')
@@ -2514,6 +2530,7 @@ wss.on('connection', (socket) => {
        */
       const text = msg.text
       const id = typeof msg.id === 'string' ? msg.id : null
+      const arrived = Date.now()
       void settling.then(async () => {
         const forDisplay = FOR_DISPLAY.test(text)
 
@@ -2535,6 +2552,7 @@ wss.on('connection', (socket) => {
             if (aside.length > 4) aside.shift()
             send({ type: 'text', delta: answer.text, ask: id })
             stats.answers.gemini++
+            recordTrace({ brain: 'gemini', ms: Date.now() - arrived, costUsd: 0, chars: text.length })
             send({ type: 'done', text: answer.text, costUsd: 0, ask: id, brain: 'gemini' })
             return
           }
@@ -2542,6 +2560,8 @@ wss.on('connection', (socket) => {
         }
 
         answering = id
+        askedAt = arrived
+        turnTools = []
         lastQuestion = text
         lastForDisplay = forDisplay
         if (!forDisplay) note('user', text)
