@@ -121,7 +121,11 @@ export function memoryServer() {
           'Use it when they tell you something that will still be true next week, ' +
           'or ask you to remember. One short sentence, written as a fact. Never ' +
           'store passwords, keys, card numbers or anything they said in confidence ' +
-          'about someone else. Do not announce that you stored it unless they asked.',
+          'about someone else. Do not announce that you stored it unless they asked. ' +
+          'When they CORRECT something already stored (a name spelled wrong, a city, a job), ' +
+          'call `forget` on the old fact first, then remember the right one — never keep both. ' +
+          'Names: keep the spelling they give; if a name came through speech and you are ' +
+          'unsure of it, ask them to spell it before storing it.',
         { fact: z.string().describe('The fact, as one short sentence.') },
         async ({ fact }) =>
           text(

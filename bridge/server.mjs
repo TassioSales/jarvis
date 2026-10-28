@@ -41,7 +41,7 @@ import { agenda, agendaNote, agendaReady } from './agenda.mjs'
 import { dueAlert } from './watch.mjs'
 import { recordTrace, traceSummary } from './traces.mjs'
 import { catchUp, DIARY_DIR, diaryNote, diaryServer, diaryTick, logTurn } from './diary.mjs'
-import { localModel, localQuick, localReady, localReadyNow, warmLocal } from './local.mjs'
+import { ABOUT_HIM, localModel, localQuick, localReady, localReadyNow, warmLocal } from './local.mjs'
 import { mobileInfo, pushFeed, startMobile } from './mobile.mjs'
 import { control, doServer, mediaSession, routineSteps } from './doer.mjs'
 import { mapsReady, mapsServer, routeSummary } from './maps.mjs'
@@ -2598,10 +2598,16 @@ wss.on('connection', (socket, req) => {
 
         // The small model gets first refusal on anything that might not need
         // the agent. It either answers, or says in one word that it cannot.
-        if ((geminiReady() || (await localReady())) && !forDisplay) {
+        // About him, or asking her to keep something: only the agent has the
+        // memory tool, so neither quick brain gets these — they could only say
+        // "noted" without noting, or guess his name.
+        if ((geminiReady() || (await localReady())) && !forDisplay && !ABOUT_HIM.test(text)) {
           quickAbort = new AbortController()
           const { signal } = quickAbort
-          const notes = worldNote() + memoryNote() + agendaNote()
+          // What he has told her first. The local model sees only the first
+          // 1500 characters, and with the weather and the news ahead of it
+          // his own name was cut off: asked "what is my name", it guessed.
+          const notes = memoryNote() + agendaNote() + worldNote()
           let brain = 'gemini'
           let answer = geminiReady() ? await quick(recent, text, { notes, signal }) : { escalate: true, why: 'no key' }
           // Gemini out of allowance: the local model takes its place for a

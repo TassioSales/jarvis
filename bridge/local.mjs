@@ -58,6 +58,14 @@ const ACTION =
 const NEEDS_DATA =
   /\b(tr[aâ]nsito|trajeto|rota|de carro|chegar (a|ao|na|no|em)|dist[aâ]ncia|clima|tempo (vai|est[aá]|hoje|amanh)|chuva|chover|temperatura|previs[aã]o|agenda|compromisso|reuni[aã]o|lembrete|not[ií]cia|d[oó]lar|bitcoin|cota[cç][aã]o|e-?mail|m[uú]sica|tocando|falei|disse|conversamos|perguntei|ontem|semana passada|m[eê]s passado|di[aá]rio|anota[cç]|nota|tela|arquivo|pasta)\b/i
 
+/**
+ * Things about him, and asking her to keep them. Only the agent can write to
+ * her memory; the small model, asked to "memorise that", said it could not and
+ * then argued about why — and asked his name, invented one.
+ */
+export const ABOUT_HIM =
+  /\b(memoriz|grav[ae]|guard[ae]|n[aã]o esque[cç]|lembra (disso|que)|meu nome|me chamo|minha (esposa|mulher|namorada|profiss[aã]o|filha|m[aã]e|irm[aã])|meu (filho|pai|irm[aã]o|anivers[aá]rio|trabalho|emprego)|sou (casad|program|analist|formad)|qual [eé] (o )?meu|quem sou eu|o que voc[eê] sabe (sobre|de) mim|me fa[cç]a perguntas)/i
+
 const LOCAL_PERSONA =`Você é Wednesday, assistente pessoal. Responda em português do Brasil.
 Trate a pessoa por "senhor". No máximo duas frases curtas. Sem listas, sem emojis.
 Faça contas com cuidado e diga só o resultado.`
@@ -86,6 +94,7 @@ export async function localQuick(history, question, opts = {}) {
   // have done something that was not done is worse than no answer.
   if (!opts.standIn && ACTION.test(question.trim())) return { escalate: true, why: 'needs the agent' }
   if (!opts.standIn && NEEDS_DATA.test(question)) return { escalate: true, why: 'needs data' }
+  if (!opts.standIn && ABOUT_HIM.test(question)) return { escalate: true, why: 'about him' }
   // Short on purpose. The long instruction the cloud models get — routing
   // rules, a page of persona — measurably confused a 3B model: with it, "15%
   // of 200" came back "three". A few plain lines and two examples do better.
