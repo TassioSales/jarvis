@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import { Scene } from './scene/Scene'
 import { Plasma } from './scene/Plasma'
 import { Hud } from './ui/Hud'
+import { Ambience } from './ui/Ambience'
 import { Boot } from './ui/Boot'
 import { Ignition } from './ui/Ignition'
 import { Lock } from './ui/Lock'
@@ -1196,6 +1197,8 @@ export default function App() {
      * reminder helps nobody. The queue is emptied by the timer below.
      */
     watchReminders((reminder) => {
+      // Seen as well as heard: the edges pulse (ui/Ambience.tsx).
+      window.dispatchEvent(new Event('jarvis-alert'))
       dueQueue.current.push(reminder)
       void sayDue()
     })
@@ -1610,6 +1613,7 @@ export default function App() {
     <>
       <Scene />
       {ORB === 'plasma' && <Plasma />}
+      <Ambience />
       <Hud />
       <Boot />
       <Briefing />

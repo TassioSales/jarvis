@@ -2084,3 +2084,33 @@ kbd {
   letter-spacing: 0.18em;
   opacity: 0.5;
 }
+
+/* ------------------------------------------------------------ ambience */
+.amb-rain {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+}
+.amb-night {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background: rgb(0 2 8 / 0.32);
+  z-index: 40;
+}
+.amb-alert {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 41;
+  box-shadow: inset 0 0 120px 20px rgb(255 179 71 / 0.55);
+  animation: amb-alert 3.2s ease-out forwards;
+}
+@keyframes amb-alert {
+  0% { opacity: 0; }
+  12% { opacity: 1; }
+  30% { opacity: 0.35; }
+  45% { opacity: 0.9; }
+  100% { opacity: 0; }
+}

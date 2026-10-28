@@ -473,7 +473,16 @@ export const phaseColor: Record<Phase, string> = {
  * instead of being reimplemented either side of the canvas boundary. A blanket
  * accent wins over a per-phase override, which wins over the built-in map.
  */
+/** The resting colour the room outside suggests (ui/Ambience.tsx), or null. */
+let ambientTint: string | null = null
+export const setAmbientTint = (tint: string | null) => {
+  ambientTint = tint
+}
+
 export function accentFor(phase: Phase, ui: UiState): string {
+  // Only at rest, and never over a colour he chose: the other phases' colours
+  // carry meaning, and a theme he asked for is his.
+  if (phase === 'dormant' && ambientTint && !ui.accent && !ui.palette[phase]) return ambientTint
   return ui.accent ?? ui.palette[phase] ?? phaseColor[phase]
 }
 
