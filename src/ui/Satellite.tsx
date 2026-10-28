@@ -4,6 +4,7 @@ import { t } from '../lib/i18n'
 import { LockRing, Padlock } from './Lock'
 import './lock.css'
 import { CoreView, DayView, WorldView } from './Monitors'
+import { Ambience } from './Ambience'
 
 /**
  * A side monitor.
@@ -48,6 +49,8 @@ export function Satellite({ kind }: { kind: SatelliteKind }) {
 
   return (
     <div className={`sat ${open ? 'sat-open' : 'sat-locked'}`}>
+      {/* The same sky as the main window, further back. */}
+      <Ambience dim />
       <header className="sat-top">
         <span className="sat-status">
           {open ? t(VIEWS[kind]) : t(live ? 'STANDBY' : 'NO SIGNAL')}

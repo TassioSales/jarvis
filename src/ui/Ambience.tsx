@@ -28,12 +28,12 @@ type Sky = {
   sun?: { rise: string | null; set: string | null }
 }
 
-type Period = 'night' | 'dawn' | 'morning' | 'noon' | 'afternoon' | 'golden' | 'dusk'
+export type Period = 'night' | 'dawn' | 'morning' | 'noon' | 'afternoon' | 'golden' | 'dusk'
 
 const H = 3_600_000
 
 /** Which part of the day it is, from today's sunrise and sunset. */
-function periodOf(now: Date, sky: Sky | null): Period {
+export function periodOf(now: Date, sky: Sky | null): Period {
   const t = now.getTime()
   const rise = sky?.sun?.rise ? new Date(sky.sun.rise).getTime() : new Date(now).setHours(6, 0, 0, 0)
   const set = sky?.sun?.set ? new Date(sky.sun.set).getTime() : new Date(now).setHours(18, 0, 0, 0)
@@ -47,7 +47,7 @@ function periodOf(now: Date, sky: Sky | null): Period {
 }
 
 /** The reactor's resting colour for each part of the day (null: its own cyan). */
-const TINT: Record<Period, string | null> = {
+export const TINT: Record<Period, string | null> = {
   night: '#4b7cff',
   dawn: '#f0a07a',
   morning: '#43d9cf',
@@ -67,7 +67,12 @@ function weatherOf(code: number) {
   return { cloud, fog, rain, storm: code >= 95 }
 }
 
-export function Ambience() {
+/**
+ * @param dim on the side monitors: the same sky, further back, so it sets the
+ *   mood behind the cards without competing with what is written on them. It
+ *   leaves the reactor's colour alone there — that is the main window's.
+ */
+export function Ambience({ dim = false }: { dim?: boolean }) {
   const [sky, setSky] = useState<Sky | null>(null)
   const [now, setNow] = useState(() => new Date())
   const [alert, setAlert] = useState(0)
@@ -104,8 +109,8 @@ export function Ambience() {
   const late = now.getHours() >= 22 || now.getHours() < 6
 
   useEffect(() => {
-    setAmbientTint(TINT[period])
-  }, [period])
+    if (!dim) setAmbientTint(TINT[period])
+  }, [period, dim])
 
   // Where the sun is, 0 at sunrise to 1 at sunset.
   const sunAt = (() => {
@@ -185,7 +190,7 @@ export function Ambience() {
 
   return (
     <>
-      <div className={`amb-sky amb-${period}`} aria-hidden>
+      <div className={`amb-sky amb-${period} ${dim ? 'amb-dim' : ''}`} aria-hidden>
         {night && (
           <div className="amb-stars" style={{ opacity: 1 - wx.cloud * 0.8 }}>
             {stars.map((s, i) => (
@@ -220,8 +225,8 @@ export function Ambience() {
       </div>
       {wx.rain > 0 && <canvas ref={rainCanvas} className="amb-rain" aria-hidden />}
       {flash > 0 && <div key={flash} className="amb-flash" aria-hidden />}
-      {late && <div className="amb-late" aria-hidden />}
-      {alert > 0 && <div key={alert} className="amb-alert" aria-hidden />}
+      {late && !dim && <div className="amb-late" aria-hidden />}
+      {alert > 0 && !dim && <div key={alert} className="amb-alert" aria-hidden />}
     </>
   )
 }

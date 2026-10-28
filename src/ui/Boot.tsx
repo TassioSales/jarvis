@@ -1,6 +1,10 @@
 import { useEffect, useState } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { useStore } from '../store'
+import { BRIDGE_HTTP_URL } from '../config'
+import { sky as skyLabel } from '../lib/weather'
+import { t as t$ } from '../lib/i18n'
+import { periodOf, TINT, type Period } from './Ambience'
 
 /**
  * The start-up sequence, rebuilt to the Iron Man boot it is quoting.
@@ -34,10 +38,35 @@ const LOG = [
 
 type Stage = 'bar' | 'rings' | 'suit' | 'reactor'
 
+/** The greeting and the name of the hour, for the end of the boot log. */
+const HOUR: Record<Period, [string, string]> = {
+  night: ['BOA NOITE', 'NOITE'],
+  dawn: ['BOM DIA', 'AMANHECER'],
+  morning: ['BOM DIA', 'MANHÃ'],
+  noon: ['BOA TARDE', 'MEIO-DIA'],
+  afternoon: ['BOA TARDE', 'TARDE'],
+  golden: ['BOA TARDE', 'FIM DE TARDE'],
+  dusk: ['BOA NOITE', 'ENTARDECER'],
+}
+
+type BootSky = { city: string; now: { temp: number; code: number }; sun?: { rise: string | null; set: string | null } }
+
 export function Boot() {
   const phase = useStore((s) => s.phase)
   const reduced = useReducedMotion()
   const [t, setT] = useState(0)
+  const [sky, setSky] = useState<BootSky | null>(null)
+
+  // The sky outside, so the boot opens in the light of the hour and ends by
+  // saying what it is like out there. Asked for at once: the log reaches its
+  // last lines in about two seconds, and without it they are simply left out.
+  useEffect(() => {
+    if (phase !== 'boot') return
+    fetch(`${BRIDGE_HTTP_URL}/weather`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => d && setSky(d as BootSky))
+      .catch(() => {})
+  }, [phase])
 
   // A single clock: elapsed milliseconds since the boot phase began. Every
   // stage reads from it, so nothing can drift out of step with anything else.
@@ -63,13 +92,22 @@ export function Boot() {
   const stage: Stage =
     t >= T.reactor ? 'reactor' : t >= T.suit ? 'suit' : t >= T.rings ? 'rings' : 'bar'
 
-  const logShown = Math.min(LOG.length, Math.floor((t / T.rings) * (LOG.length + 1)))
+  const period = periodOf(new Date(), sky as Parameters<typeof periodOf>[1])
+  const [hello, hour] = HOUR[period]
+  const log = [
+    ...LOG,
+    `PERÍODO ........................ ${hour}`,
+    ...(sky ? [`${sky.city.toUpperCase()} ....... ${Math.round(sky.now.temp)}° ${t$(skyLabel(sky.now.code)).toUpperCase()}`] : []),
+    `${hello}, SENHOR.`,
+  ]
+  const logShown = Math.min(log.length, Math.floor((t / T.rings) * (log.length + 1)))
   const barPct = Math.min(1, t / (T.rings - 300))
 
   return (
     <AnimatePresence>
       <motion.div
-        className="boot"
+        className={`boot boot-${period}`}
+        style={TINT[period] ? { ['--accent' as string]: TINT[period] } : undefined}
         initial={{ opacity: 1 }}
         exit={{ opacity: 0, filter: 'blur(10px)' }}
         transition={{ duration: 0.8 }}
@@ -92,7 +130,7 @@ export function Boot() {
             </div>
           </div>
           <div className="boot-log">
-            {LOG.slice(0, logShown).map((l) => (
+            {log.slice(0, logShown).map((l) => (
               <div key={l} className="boot-log-line">
                 {l}
               </div>

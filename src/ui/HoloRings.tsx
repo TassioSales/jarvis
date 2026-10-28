@@ -20,26 +20,32 @@ const SPEED_BY_PHASE: Record<Phase, number> = {
   speaking: 14,
 }
 
-export function HoloRings() {
-  const phase = useStore((s) => s.phase)
-  const level = useStore((s) => s.level)
-  const [wave, setWave] = useState(0)
+/** An arc from twelve o'clock, clockwise, over a fraction of the circle. */
+function arc(r: number, f: number) {
+  const k = Math.max(0, Math.min(0.9999, f))
+  const a = k * Math.PI * 2 - Math.PI / 2
+  const x = Math.cos(a) * r
+  const y = Math.sin(a) * r
+  return `M 0 ${-r} A ${r} ${r} 0 ${k > 0.5 ? 1 : 0} 1 ${x.toFixed(2)} ${y.toFixed(2)}`
+}
 
-  // Audio wave generator that ripples with voice loudness
+export type RingData = {
+  cpu: number | null
+  ram: number | null
+  gpuTemp: number | null
+  /** The next thing on the agenda or the next reminder, if any. */
+  next: { at: Date; text: string } | null
+}
+
+export function HoloRings({ data }: { data?: RingData }) {
+  const phase = useStore((s) => s.phase)
+  // Once a second, for the seconds arc. The voice used to be drawn here too, as
+  // an arc re-rendered every frame; it is VoiceHalo's job now, on a canvas.
+  const [, setTick] = useState(0)
   useEffect(() => {
-    let gone = false
-    let frame = 0
-    const step = () => {
-      if (gone) return
-      setWave((w) => (w + 0.08 + level * 0.18) % (Math.PI * 2))
-      frame = requestAnimationFrame(step)
-    }
-    frame = requestAnimationFrame(step)
-    return () => {
-      gone = true
-      cancelAnimationFrame(frame)
-    }
-  }, [level])
+    const timer = setInterval(() => setTick((n) => n + 1), 1000)
+    return () => clearInterval(timer)
+  }, [])
 
   const dur = SPEED_BY_PHASE[phase] ?? 50
   const isOff = phase === 'offline'
@@ -64,25 +70,6 @@ export function HoloRings() {
     }
     return list
   }, [])
-
-  // Audio-reactive waveform path around the lower arc (from 35° to 145°)
-  const wavePath = useMemo(() => {
-    const points = []
-    const baseR = 194
-    const count = 36
-    const startAngle = (30 * Math.PI) / 180
-    const endAngle = (150 * Math.PI) / 180
-    for (let i = 0; i <= count; i++) {
-      const t = i / count
-      const angle = startAngle + t * (endAngle - startAngle)
-      const ripple = Math.sin(t * 12 + wave * 3) * Math.cos(t * 7 - wave * 2) * (level * 18 + 2.5)
-      const r = baseR + ripple
-      const x = Math.cos(angle) * r
-      const y = Math.sin(angle) * r
-      points.push(`${i === 0 ? 'M' : 'L'} ${x.toFixed(1)} ${y.toFixed(1)}`)
-    }
-    return points.join(' ')
-  }, [level, wave])
 
   return (
     <div className={`holo-rings-wrap ${isOff ? 'holo-off' : ''}`} aria-hidden="true">
@@ -136,8 +123,24 @@ export function HoloRings() {
           <path d="M 155 155 A 219 219 0 0 1 130 177" className="holo-bracket" />
         </g>
 
-        {/* Audio Reactive Waveform Oscilloscope Arc */}
-        <path d={wavePath} className="holo-waveform" />
+        {/* Live instruments: the seconds of this minute, the processor and the
+            memory, each an arc from twelve o'clock. */}
+        <g className="holo-data">
+          <circle cx="0" cy="0" r="222" className="holo-track" />
+          <path d={arc(222, (Date.now() % 60_000) / 60_000)} className="holo-arc holo-arc-sec" />
+          {data?.cpu != null && (
+            <>
+              <circle cx="0" cy="0" r="215" className="holo-track" />
+              <path d={arc(215, data.cpu / 100)} className={`holo-arc ${data.cpu >= 85 ? 'holo-arc-hot' : ''}`} />
+            </>
+          )}
+          {data?.ram != null && (
+            <>
+              <circle cx="0" cy="0" r="186" className="holo-track" />
+              <path d={arc(186, data.ram / 100)} className="holo-arc holo-arc-dim" />
+            </>
+          )}
+        </g>
 
         {/* Fixed Reticle Crosshairs and Stark Telemetry */}
         <g className="holo-fixed">
@@ -148,17 +151,21 @@ export function HoloRings() {
           <line x1="0" y1="252" x2="0" y2="270" className="holo-reticle-cross" />
 
           {/* Holographic labels */}
+          {/* Real readings, where there used to be film props ("MK-VII",
+              "CORE // OPTIMAL") that said nothing. */}
           <text x="-210" y="-218" className="holo-spec">
-            SYS // MK-VII
+            CPU // {data?.cpu != null ? `${String(Math.round(data.cpu)).padStart(2, '0')}%` : '--'}
           </text>
           <text x="210" y="-218" textAnchor="end" className="holo-spec">
-            CORE // OPTIMAL
+            RAM // {data?.ram != null ? `${String(Math.round(data.ram)).padStart(2, '0')}%` : '--'}
           </text>
           <text x="-210" y="228" className="holo-spec">
-            AUDIO // 16kHz
+            {data?.gpuTemp != null ? `GPU // ${data.gpuTemp}°C` : 'AUDIO // 16kHz'}
           </text>
-          <text x="210" y="228" textAnchor="end" className="holo-spec">
-            VAD // SILERO-ON
+          <text x="210" y="228" textAnchor="end" className="holo-spec holo-spec-next">
+            {data?.next
+              ? `${String(data.next.at.getHours()).padStart(2, '0')}:${String(data.next.at.getMinutes()).padStart(2, '0')} // ${data.next.text.slice(0, 22).toUpperCase()}`
+              : 'AGENDA // LIVRE'}
           </text>
         </g>
       </svg>

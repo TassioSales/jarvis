@@ -6,7 +6,8 @@ import { BladeSweep, Blades } from './Blades'
 import { Effects } from './Effects'
 import { Pointer } from './Pointer'
 import { GestureGuide } from './GestureGuide'
-import { HoloRings } from './HoloRings'
+import { HoloRings, type RingData } from './HoloRings'
+import { HoloCaption, PhaseSweep, VoiceHalo } from './Living'
 import { t as tr } from '../lib/i18n'
 import { BRIDGE_HTTP_URL, LANG } from '../config'
 import { sky as skyLabel } from '../lib/weather'
@@ -65,6 +66,24 @@ function useBridge<T>(path: string, everyMs: number): T | null {
 type RailStatus = { services: { id: string; label: string; state: 'ok' | 'warn' | 'down' | 'off'; detail: string }[] }
 type RailSystem = { cpu: { now: number }; mem: { used: number; total: number }; gpu: { util: number | null; temp: number | null } | null }
 type RailSky = { city: string; now: { temp: number; humidity: number; code: number } }
+type RailToday = {
+  reminders: { text: string; at: string }[]
+  agenda: { events: { title: string; start: string; allDay: boolean }[] }
+}
+
+/** The next timed thing today or tomorrow: an event, or else a reminder. */
+function nextUp(today: RailToday | null) {
+  if (!today) return null
+  const now = Date.now()
+  const soon = (iso: string) => {
+    const t = new Date(iso).getTime()
+    return t > now && t - now < 36 * 3_600_000
+  }
+  const event = today.agenda?.events?.find((e) => !e.allDay && soon(e.start))
+  if (event) return { at: new Date(event.start), text: event.title }
+  const reminder = [...(today.reminders ?? [])].sort((a, b) => a.at.localeCompare(b.at)).find((r) => soon(r.at))
+  return reminder ? { at: new Date(reminder.at), text: reminder.text } : null
+}
 
 const statusText: Record<Phase, string> = {
   offline: 'OFFLINE',
@@ -207,7 +226,6 @@ function DecodeText({ text }: { text: string }) {
 
 export function Hud() {
   const phase = useStore((s) => s.phase)
-  const caption = useStore((s) => s.caption)
   const turns = useStore((s) => s.turns)
   const activeTool = useStore((s) => s.activeTool)
   const connected = useStore((s) => s.connected)
@@ -223,6 +241,13 @@ export function Hud() {
   const railStatus = useBridge<RailStatus>('/status', 10_000)
   const railSystem = useBridge<RailSystem>('/system', 4000)
   const railSky = useBridge<RailSky>('/weather', 10 * 60_000)
+  const railToday = useBridge<RailToday>('/today', 60_000)
+  const rings: RingData = {
+    cpu: railSystem ? railSystem.cpu.now : null,
+    ram: railSystem ? (railSystem.mem.used / railSystem.mem.total) * 100 : null,
+    gpuTemp: railSystem?.gpu?.temp ?? null,
+    next: nextUp(railToday),
+  }
   const error = useStore((s) => s.error)
   const level = useStore((s) => s.level)
   const voice = useStore((s) => s.voice)
@@ -253,7 +278,9 @@ export function Hud() {
           `z-index: auto`, so paint order is document order and the sweep stays
           behind the transcript and the panels without a z-index war. */}
       <BladeSweep />
-      <HoloRings />
+      <HoloRings data={rings} />
+      <VoiceHalo />
+      <PhaseSweep />
 
       <Corner at="tl" />
       <Corner at="tr" />
@@ -388,18 +415,8 @@ export function Hud() {
         </div>
       )}
 
-      <AnimatePresence>
-        {caption && (
-          <motion.div
-            className="caption"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-          >
-            {caption}
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* The caption on a sheet of glass, word by word (ui/Living.tsx). */}
+      <HoloCaption />
 
       {/* The one surface. Panels used to sit alongside this as a second place
           for things to appear, which meant two places to look and a decision
