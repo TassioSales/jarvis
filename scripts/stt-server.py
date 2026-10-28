@@ -92,7 +92,17 @@ if os.path.exists(TURN_MODEL):
         turn_session = None
 
 
-NAME_HINT = os.environ.get("JARVIS_STT_HINT", "Wednesday, que horas são? Wednesday, toca uma música.")
+# Her name and the words he actually uses — places, things he asks for — so a
+# word the model half-heard is resolved toward his vocabulary. Plain sentences
+# rather than a word list: a list in the prompt is what makes Whisper write
+# words nobody said.
+NAME_HINT = os.environ.get(
+    "JARVIS_STT_HINT",
+    "Wednesday, que horas são? Wednesday, toca uma música no Spotify. "
+    "Como está o trânsito até o Park Shopping e a Esplanada? Moro no Total Ville, em Santa Maria. "
+    "Limpa a memória RAM da máquina. Me lembra da agenda e do lembrete.",
+)
+BEAM = int(os.environ.get("JARVIS_STT_BEAM", "5"))
 
 # ------------------------------------------------------------- whose voice
 #
@@ -190,7 +200,10 @@ def transcribe(audio: bytes, enrol=False):
         segments, _ = model.transcribe(
             samples,
             language=LANG,
-            beam_size=1,
+            # Five, not one: on this GTX 1650 it costs ~0.1 s a phrase and got
+            # names and places right that greedy decoding missed ("Park
+            # Shopping" for "parque shopping"). JARVIS_STT_BEAM=1 for speed.
+            beam_size=BEAM,
             vad_filter=True,
             condition_on_previous_text=False,
             without_timestamps=True,

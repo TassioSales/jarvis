@@ -217,6 +217,15 @@ export async function mobileInfo() {
   const ip = lanAddress()
   if (!ip) return { enabled: true, url: null, qr: null }
   const url = `http://${ip}:${PORT}/m?k=${KEY}`
-  const qr = await QRCode.toString(url, { type: 'svg', margin: 1, color: { dark: '#00e5ffff', light: '#00000000' } })
+  // Black on white with the full quiet zone, and the lowest error correction
+  // (fewest modules). The cyan-on-transparent version matched the panels and
+  // no phone camera would read it: readers expect dark modules on a light,
+  // bordered ground.
+  const qr = await QRCode.toString(url, {
+    type: 'svg',
+    margin: 4,
+    errorCorrectionLevel: 'L',
+    color: { dark: '#000000ff', light: '#ffffffff' },
+  })
   return { enabled: true, address: `http://${ip}:${PORT}/m`, qr }
 }

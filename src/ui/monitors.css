@@ -1367,11 +1367,41 @@
 }
 .hx-phone span {
   display: block;
-  width: clamp(72px, 12vmin, 140px);
+  width: clamp(120px, 18vmin, 220px);
   aspect-ratio: 1;
-  background: rgb(0 229 255 / 0.04);
-  border: 1px solid color-mix(in srgb, var(--interface) 30%, transparent);
-  padding: 4px;
+  background: #fff;
+  border-radius: 4px;
+  cursor: zoom-in;
+}
+/* Clicked: the code full size in the middle of the screen, to scan from
+   across the desk. */
+.hx-qr-big {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  gap: 16px;
+  align-content: center;
+  background: rgb(0 0 0 / 0.85);
+  cursor: zoom-out;
+}
+.hx-qr-big > span {
+  width: min(70vmin, 520px);
+  aspect-ratio: 1;
+  background: #fff;
+  border-radius: 8px;
+}
+.hx-qr-big svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.hx-qr-big p {
+  margin: 0;
+  color: #e6fbff;
+  font-family: var(--mono);
+  letter-spacing: 0.15em;
 }
 .hx-phone svg {
   width: 100%;
