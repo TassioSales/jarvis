@@ -40,7 +40,7 @@ export async function warmLocal() {
   if (!(await localReady())) return
   fetch(`${OLLAMA}/api/generate`, {
     method: 'POST',
-    body: JSON.stringify({ model: MODEL, prompt: '', keep_alive: '2m' }),
+    body: JSON.stringify({ model: MODEL, prompt: '', keep_alive: '30m' }),
   }).catch(() => {})
 }
 
@@ -84,7 +84,9 @@ export async function localQuick(history, question, opts = {}) {
     (opts.standIn ? LOCAL_STANDIN : LOCAL_ROUTING) +
     clock() +
     (opts.notes ? `\nFatos que você sabe:${opts.notes.slice(0, 1500)}` : '')
-  const limit = AbortSignal.timeout(opts.standIn ? 20_000 : 6000)
+  // Generous when it is not yet in memory: it is loaded on demand, and the
+  // first question after a while pays for the load.
+  const limit = AbortSignal.timeout(opts.standIn ? 20_000 : 15_000)
   try {
     const res = await fetch(`${OLLAMA}/api/chat`, {
       method: 'POST',
@@ -92,7 +94,7 @@ export async function localQuick(history, question, opts = {}) {
       body: JSON.stringify({
         model: MODEL,
         stream: false,
-        keep_alive: '2m',
+        keep_alive: '30m',
         messages: [
           { role: 'system', content: system },
           ...history.slice(-8).map((t) => ({ role: t.role === 'model' ? 'assistant' : 'user', content: t.text })),

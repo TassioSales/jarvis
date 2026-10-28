@@ -36,6 +36,14 @@ const PT = /^pt/i.test(LANG)
 // cents of API-equivalent cost for "how much is twelve times twelve".
 const TIMEOUT_MS = 5000
 
+/**
+ * Until when Gemini is left alone after saying its allowance is spent (429).
+ * Asking again each question only adds a second before the fallback; and the
+ * key may be shared with other programs on this machine, which spend it too.
+ */
+let restingUntil = 0
+export const geminiResting = () => Date.now() < restingUntil
+
 export const geminiReady = () => Boolean(KEY)
 export const geminiModel = () => MODEL
 
@@ -94,6 +102,7 @@ export function clock() {
  */
 export async function quick(history, question, opts = {}) {
   if (!KEY) return { escalate: true, why: 'no key' }
+  if (Date.now() < restingUntil) return { escalate: true, why: 'quota' }
 
   const system = PERSONA + (opts.standIn ? STANDING_IN : ROUTING) + clock() + (opts.notes ?? '')
   const contents = [
@@ -116,6 +125,11 @@ export async function quick(history, question, opts = {}) {
         }),
       },
     )
+    if (res.status === 429) {
+      restingUntil = Date.now() + 30 * 60_000
+      console.warn('[jarvis] Gemini allowance spent (429); resting it for 30 min')
+      return { escalate: true, why: 'quota' }
+    }
     if (!res.ok) return { escalate: true, why: `http ${res.status}` }
     const data = await res.json()
     const text = (data.candidates?.[0]?.content?.parts ?? [])

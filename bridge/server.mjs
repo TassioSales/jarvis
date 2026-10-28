@@ -34,7 +34,7 @@ import {
   weather,
   worldNote,
 } from './feeds.mjs'
-import { transcribe, geminiModel, geminiReady, quick, warmGemini } from './gemini.mjs'
+import { transcribe, geminiModel, geminiReady, geminiResting, quick, warmGemini } from './gemini.mjs'
 import { dueReminders, listReminders } from './reminders.mjs'
 import { system } from './system.mjs'
 import { agenda, agendaNote, agendaReady } from './agenda.mjs'
@@ -1703,7 +1703,12 @@ async function statusReport() {
     effort: EFFORT,
     services: [
       { id: 'brain', label: 'Claude', state: 'ok', detail: MODEL.replace(/^claude-/, '') },
-      { id: 'quick', label: 'Gemini', state: geminiReady() ? 'ok' : 'off', detail: geminiReady() ? geminiModel() : 'sem chave' },
+      {
+        id: 'quick',
+        label: 'Gemini',
+        state: !geminiReady() ? 'off' : geminiResting() ? 'warn' : 'ok',
+        detail: !geminiReady() ? 'sem chave' : geminiResting() ? 'cota esgotada · local no lugar' : geminiModel(),
+      },
       {
         id: 'local',
         label: 'Cérebro local',
@@ -2595,6 +2600,9 @@ wss.on('connection', (socket) => {
           const notes = worldNote() + memoryNote() + agendaNote()
           let brain = 'gemini'
           let answer = geminiReady() ? await quick(recent, text, { notes, signal }) : { escalate: true, why: 'no key' }
+          // Gemini out of allowance: the local model takes its place for a
+          // while — loaded now, so the next question finds it warm.
+          if (answer.why === 'quota') void warmLocal()
           // Gemini could not be reached — offline, out of quota, down — as
           // opposed to having judged that the question needs Claude. The
           // brain on this machine gets the same first refusal instead.
@@ -2631,13 +2639,17 @@ wss.on('connection', (socket) => {
         lastForDisplay = forDisplay
         if (!forDisplay) note('user', text)
 
-        let forClaude = text
+        // The time, every turn. The system prompt is written once per
+        // session, and without this Claude reached for the shell to learn
+        // the date before setting a reminder — and waited on a consent card.
+        const now = new Date()
+        let forClaude = `[Agora: ${now.toLocaleString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}; ISO ${now.toISOString()}]\n${text}`
         if (aside.length && !forDisplay) {
           forClaude =
             '(For context only — a few quick exchanges you handled since we last spoke: ' +
             aside.map((x) => `they said "${x.q}", you answered "${x.a}"`).join('; ') +
             '.)\n\n' +
-            text
+            forClaude
           aside = []
         }
 
