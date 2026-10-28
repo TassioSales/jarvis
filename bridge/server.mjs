@@ -41,6 +41,7 @@ import { agenda, agendaNote, agendaReady } from './agenda.mjs'
 import { dueAlert } from './watch.mjs'
 import { recordTrace, traceSummary } from './traces.mjs'
 import { catchUp, diaryNote, diaryServer, diaryTick, logTurn } from './diary.mjs'
+import { localModel, localQuick, localReady, localReadyNow, warmLocal } from './local.mjs'
 import { control, doServer, mediaSession, routineSteps } from './doer.mjs'
 import { mapsReady, mapsServer, routeSummary } from './maps.mjs'
 import { dueOffer, habits, habitsNote, learnFromConversation, learnServer, recordAction } from './learn.mjs'
@@ -883,7 +884,7 @@ function cleanHeard(text) {
  */
 const stats = {
   since: new Date().toISOString(),
-  answers: { gemini: 0, claude: 0 },
+  answers: { gemini: 0, claude: 0, local: 0 },
   heard: { local: 0, elevenlabs: 0, gemini: 0 },
   spoken: { cloud: 0, local: 0 },
   sttMs: [],
@@ -1687,6 +1688,12 @@ async function statusReport() {
       { id: 'brain', label: 'Claude', state: 'ok', detail: MODEL.replace(/^claude-/, '') },
       { id: 'quick', label: 'Gemini', state: geminiReady() ? 'ok' : 'off', detail: geminiReady() ? geminiModel() : 'sem chave' },
       {
+        id: 'local',
+        label: 'Cérebro local',
+        state: localReadyNow() ? 'ok' : 'off',
+        detail: localReadyNow() ? `${localModel()} · offline` : 'Ollama parado',
+      },
+      {
         id: 'ears',
         label: 'Ouvido local',
         state: ears ? 'ok' : 'down',
@@ -1884,6 +1891,7 @@ const RESULT_FAILURES = {
  */
 let lastAlertCheck = 0
 warmGemini()
+void warmLocal()
 // Yesterday's page, if the machine was off at 23:30.
 void catchUp()
 // The calendar, kept warm so the prompts and the watcher have it without waiting.
@@ -2429,10 +2437,14 @@ wss.on('connection', (socket) => {
             // without tools, and saying so where the question needed them.
             const interrupted = msg.subtype !== 'success' && cancelledAsk !== null && cancelledAsk === answering
             let understudy = null
-            if (!interrupted && !priming && !lastForDisplay && lastQuestion && geminiReady() && claudeFailed(msg)) {
+            if (!interrupted && !priming && !lastForDisplay && lastQuestion && (geminiReady() || localReadyNow()) && claudeFailed(msg)) {
               console.warn(`[jarvis] Claude could not answer (${msg.subtype}); the small model is standing in`)
               const answer = await quick(recent, lastQuestion, { standIn: true, notes: worldNote() + memoryNote() + agendaNote() })
               if (!answer.escalate) understudy = answer.text
+              if (!understudy) {
+                const local = await localQuick(recent, lastQuestion, { standIn: true, notes: worldNote() + memoryNote() + agendaNote() })
+                if (!local.escalate) understudy = local.text
+              }
             }
 
             if (understudy) {
@@ -2546,24 +2558,36 @@ wss.on('connection', (socket) => {
 
         // The small model gets first refusal on anything that might not need
         // the agent. It either answers, or says in one word that it cannot.
-        if (geminiReady() && !forDisplay) {
+        if ((geminiReady() || (await localReady())) && !forDisplay) {
           quickAbort = new AbortController()
           const { signal } = quickAbort
-          const answer = await quick(recent, text, { notes: worldNote() + memoryNote() + agendaNote(), signal })
+          const notes = worldNote() + memoryNote() + agendaNote()
+          let brain = 'gemini'
+          let answer = geminiReady() ? await quick(recent, text, { notes, signal }) : { escalate: true, why: 'no key' }
+          // Gemini could not be reached — offline, out of quota, down — as
+          // opposed to having judged that the question needs Claude. The
+          // brain on this machine gets the same first refusal instead.
+          if (answer.escalate && answer.why !== 'needs the agent' && !signal.aborted && (await localReady())) {
+            const local = await localQuick(recent, text, { notes, signal })
+            if (!local.escalate || local.why === 'needs the agent') {
+              answer = local
+              brain = 'local'
+            }
+          }
           quickAbort = null
           // Interrupted while it was thinking: the user has moved on, and so
           // has the client. Say nothing.
           if (signal.aborted) return
           if (!answer.escalate) {
-            console.log('[jarvis] answered by the small model')
+            console.log(`[jarvis] answered by the ${brain === 'local' ? 'local' : 'small'} model`)
             note('user', text)
             note('model', answer.text)
             aside.push({ q: text, a: answer.text })
             if (aside.length > 4) aside.shift()
             send({ type: 'text', delta: answer.text, ask: id })
-            stats.answers.gemini++
-            recordTrace({ brain: 'gemini', ms: Date.now() - arrived, costUsd: 0, chars: text.length })
-            send({ type: 'done', text: answer.text, costUsd: 0, ask: id, brain: 'gemini' })
+            stats.answers[brain]++
+            recordTrace({ brain, ms: Date.now() - arrived, costUsd: 0, chars: text.length })
+            send({ type: 'done', text: answer.text, costUsd: 0, ask: id, brain })
             return
           }
           console.log(`[jarvis] passed to Claude (${answer.why})`)

@@ -73,7 +73,9 @@ Seu sistema principal está indisponível agora e você responde no lugar dele, 
   : `
 Your main system is unavailable and you are answering in its place, without tools. If the request needs mail, calendar, the internet, files or an action, say in one sentence that it is unavailable for the moment. Otherwise answer normally.`
 
-function clock() {
+export { PERSONA, ROUTING, STANDING_IN }
+
+export function clock() {
   const now = new Date()
   return PT
     ? `\nAgora: ${now.toLocaleString('pt-BR', { dateStyle: 'full', timeStyle: 'short' })}.`

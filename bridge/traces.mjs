@@ -86,7 +86,7 @@ export function traceSummary(now = new Date()) {
   const sum = (list) => {
     const by = (b) => list.filter((t) => t.brain === b)
     const claude = by('claude')
-    const quick = [...by('gemini'), ...by('standin')]
+    const quick = list.filter((t) => t.brain !== 'claude')
     const claudeCost = claude.reduce((a, t) => a + (t.cost || 0), 0)
     const perClaude = median(claude.map((t) => t.cost || 0).filter((c) => c > 0)) ?? 0
     return {
