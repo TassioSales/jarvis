@@ -40,6 +40,7 @@ import { system } from './system.mjs'
 import { agenda, agendaNote, agendaReady } from './agenda.mjs'
 import { dueAlert } from './watch.mjs'
 import { recordTrace, traceSummary } from './traces.mjs'
+import { catchUp, diaryNote, diaryServer, diaryTick, logTurn } from './diary.mjs'
 import { control, doServer, mediaSession, routineSteps } from './doer.mjs'
 import { mapsReady, mapsServer, routeSummary } from './maps.mjs'
 import { dueOffer, habits, habitsNote, learnFromConversation, learnServer, recordAction } from './learn.mjs'
@@ -406,6 +407,8 @@ function decide(name, writes) {
     if (server === 'jarvis_maps') return true
     // Reading what he has learned, or forgetting a habit, changes nothing outside his own file.
     if (server === 'jarvis_learn') return true
+    // Writing his diary page touches only that page.
+    if (server === 'jarvis_diary') return true
 
     // The house. Looking at it is free. Switching asks, unless the user has
     // said that switching is something they never want to be asked about —
@@ -1881,6 +1884,8 @@ const RESULT_FAILURES = {
  */
 let lastAlertCheck = 0
 warmGemini()
+// Yesterday's page, if the machine was off at 23:30.
+void catchUp()
 // The calendar, kept warm so the prompts and the watcher have it without waiting.
 if (agendaReady()) {
   void agenda()
@@ -1899,6 +1904,7 @@ setInterval(() => {
   // minutes, a hot graphics card (watch.mjs). Checked once a minute.
   if (Date.now() - lastAlertCheck >= 60_000) {
     lastAlertCheck = Date.now()
+    diaryTick()
     dueAlert()
       .then((text) => {
         if (!text) return
@@ -2024,6 +2030,7 @@ wss.on('connection', (socket) => {
       .catch(() => {})
   }
   const note = (role, text) => {
+    logTurn(role, text)
     recent.push({ role, text: String(text).slice(0, 600) })
     if (recent.length > 12) recent.shift()
     unlearned.push({ role, text: String(text).slice(0, 600) })
@@ -2197,6 +2204,8 @@ wss.on('connection', (socket) => {
         ...(mapsReady() ? { jarvis_maps: mapsServer() } : {}),
         // The habits he has noticed, and the means to drop one.
         jarvis_learn: learnServer(),
+        // His diary in the Obsidian vault.
+        jarvis_diary: diaryServer(),
       },
       // A plain system prompt, not the claude_code preset. The preset is
       // tuned for a coding agent — verbose, file-oriented, and a large chunk
@@ -2204,7 +2213,7 @@ wss.on('connection', (socket) => {
       // keeps answers short enough to speak, and cuts cost per turn.
       // Read per session, so a fact learned in one conversation is known in the
       // next without restarting the bridge.
-      systemPrompt: SYSTEM_PROMPT + LANGUAGE_NOTE + DISABLED_NOTE + worldNote() + memoryNote() + habitsNote() + agendaNote(),
+      systemPrompt: SYSTEM_PROMPT + LANGUAGE_NOTE + DISABLED_NOTE + worldNote() + memoryNote() + habitsNote() + agendaNote() + diaryNote(),
       // Run from the home directory so project-scoped MCP servers don't shadow
       // the global ones, and so file tools have a sane root.
       cwd: homedir(),

@@ -236,3 +236,32 @@ export function warmGemini() {
   if (!KEY) return
   void quick([], 'Diga apenas: ok.').catch(() => {})
 }
+
+/**
+ * Free-form writing for the background jobs (the diary): one instruction in,
+ * text out. Not the voice path — no persona, a longer allowance, more time.
+ *
+ * @returns {Promise<string | null>}
+ */
+export async function compose(instruction, maxOutputTokens = 1400) {
+  if (!KEY) return null
+  try {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`,
+      {
+        method: 'POST',
+        signal: AbortSignal.timeout(45_000),
+        headers: { 'content-type': 'application/json', 'x-goog-api-key': KEY },
+        body: JSON.stringify({
+          contents: [{ role: 'user', parts: [{ text: instruction }] }],
+          generationConfig: { temperature: 0.5, maxOutputTokens, thinkingConfig: { thinkingBudget: 0 } },
+        }),
+      },
+    )
+    if (!res.ok) return null
+    const data = await res.json()
+    return (data.candidates?.[0]?.content?.parts ?? []).map((p) => p.text ?? '').join('').trim() || null
+  } catch {
+    return null
+  }
+}
