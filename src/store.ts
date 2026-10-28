@@ -242,6 +242,8 @@ type State = {
   locked: boolean
   /** The microphone is off and given back to the system — nothing is heard. */
   muted: boolean
+  /** Focus mode: until when reminders and alerts are held. 0 when off. */
+  focusUntil: number
   /** Where the identity check currently stands; drives the lock's animation. */
   identity: 'idle' | 'scanning' | 'granted' | 'denied'
   /** Cards currently on the display, newest last. */
@@ -261,6 +263,7 @@ type State = {
   setBootNote: (n: string) => void
   setLocked: (locked: boolean) => void
   setMuted: (muted: boolean) => void
+  setFocusUntil: (until: number) => void
   setBriefing: (briefing: State['briefing']) => void
   setConsent: (consent: State['consent']) => void
   setHelp: (help: boolean) => void
@@ -308,6 +311,7 @@ export const useStore = create<State>((set) => ({
   bootNote: '',
   locked: false,
   muted: false,
+  focusUntil: 0,
   identity: 'idle',
   briefing: null,
   consent: null,
@@ -320,6 +324,7 @@ export const useStore = create<State>((set) => ({
   setBootNote: (bootNote) => set({ bootNote }),
   setLocked: (locked) => set({ locked }),
   setMuted: (muted) => set({ muted }),
+  setFocusUntil: (focusUntil) => set({ focusUntil }),
   setBriefing: (briefing) => set({ briefing }),
   setConsent: (consent) => set({ consent }),
   setHelp: (help) => set({ help }),

@@ -184,6 +184,14 @@ export function Hud() {
   const activeTool = useStore((s) => s.activeTool)
   const connected = useStore((s) => s.connected)
   const muted = useStore((s) => s.muted)
+  const focusUntil = useStore((s) => s.focusUntil)
+  const [, tick] = useState(0)
+  useEffect(() => {
+    if (!focusUntil) return
+    const timer = setInterval(() => tick((n) => n + 1), 1000)
+    return () => clearInterval(timer)
+  }, [focusUntil])
+  const focusLeft = focusUntil ? Math.max(0, focusUntil - Date.now()) : 0
   const railStatus = useBridge<RailStatus>('/status', 10_000)
   const railSystem = useBridge<RailSystem>('/system', 4000)
   const railSky = useBridge<RailSky>('/weather', 10 * 60_000)
@@ -232,6 +240,12 @@ export function Hud() {
           </div>
         )}
 
+        {focusLeft > 0 && (
+          <div className="focus-badge">
+            {tr('FOCUS')} · {String(Math.floor(focusLeft / 60_000)).padStart(2, '0')}:
+            {String(Math.floor((focusLeft % 60_000) / 1000)).padStart(2, '0')}
+          </div>
+        )}
         {muted && (
           <button className="mic-off" onClick={() => window.dispatchEvent(new Event('jarvis-unmute'))}>
             {tr('MIC OFF · PRESS M')}

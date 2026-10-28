@@ -30,7 +30,7 @@ void HAIL
 const THING = eval(source(app, 'THING'))
 void THING
 const patterns = { WAKE, GREETING }
-for (const name of ['UP_TO_NAME', 'STOP_CMD', 'BARE_STOP', 'LOCK_CMD', 'UNLOCK_CMD', 'ENROL_CMD', 'IDENTIFY_CMD', 'BRIEF_CMD', 'HELP_CMD', 'YES_CMD', 'NO_CMD', 'VOICE_ENROL_CMD', 'VOICE_FORGET_CMD', 'MUTE_CMD']) {
+for (const name of ['UP_TO_NAME', 'STOP_CMD', 'BARE_STOP', 'LOCK_CMD', 'UNLOCK_CMD', 'ENROL_CMD', 'IDENTIFY_CMD', 'BRIEF_CMD', 'HELP_CMD', 'YES_CMD', 'NO_CMD', 'VOICE_ENROL_CMD', 'VOICE_FORGET_CMD', 'MUTE_CMD', 'FOCUS_CMD', 'FOCUS_END_CMD']) {
   patterns[name] = eval(source(app, name))
 }
 void NAME
@@ -58,6 +58,8 @@ const cases = {
   NO_CMD: { yes: ['não', 'Não, cancela.', 'negativo'], no: ['sim', 'pode'] },
   VOICE_ENROL_CMD: { yes: ['aprende a minha voz', 'Aprenda minha voz.', 'cadastrar minha voz', 'reconhecer a minha voz'], no: ['aprende a tocar violão', 'minha voz está rouca', 'cadastrar meu rosto'] },
   MUTE_CMD: { yes: ['desliga o microfone', 'Desligue o microfone.', 'para de me ouvir', 'silencia o microfone'], no: ['desliga a luz', 'mudo', 'o microfone está ruim', 'para de tocar'] },
+  FOCUS_CMD: { yes: ['modo foco', 'Modo foco por 25 minutos.', 'entra em modo foco por uma hora', 'foco', 'me deixa concentrar meia hora'], no: ['foco no trabalho amanhã', 'o foco da câmera está ruim'] },
+  FOCUS_END_CMD: { yes: ['sair do modo foco', 'termina o foco', 'fim do foco'], no: ['modo foco', 'termina o e-mail'] },
   VOICE_FORGET_CMD: { yes: ['esquece a minha voz', 'Apague minha voz.', 'esquecer minha voz'], no: ['esquece isso', 'apaga a luz'] },
 }
 

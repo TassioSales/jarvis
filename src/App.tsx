@@ -138,6 +138,11 @@ const VOICE_FORGET_CMD =
 /** "Desliga o microfone" — the voice way in to the mute. The way out is M, or the badge. */
 const MUTE_CMD =
   /^(?:desliga|desligue|desligar|desativa|desative|desativar|corta|corte|silencia|silencie)\s+(?:o\s+)?microfone[\s.!]*$|^(?:para|pare)\s+de\s+(?:me\s+)?ouvir[\s.!]*$|^(?:mute|turn off)\s+(?:the\s+)?(?:mic|microphone)[\s.!]*$/i
+/** "Modo foco por 50 minutos", "foco", "me deixa concentrar meia hora". */
+const FOCUS_CMD =
+  /^(?:(?:entra(?:r)?\s+(?:em|no)\s+)?modo\s+foco|foco|me\s+deixa\s+(?:focar|concentrar)|concentra[çc][aã]o|focus mode)(?:\s+(?:por|durante|de))?(?:\s+(\d+|uma|meia)\s*(minutos?|min|horas?|hora))?[\s.!]*$/i
+const FOCUS_END_CMD =
+  /^(?:sai(?:r)?\s+do\s+(?:modo\s+)?foco|termina(?:r)?\s+o\s+foco|fim\s+do\s+foco|acabou\s+o\s+foco|end focus)[\s.!]*$/i
 /** How long he listens to learn a voice. */
 const VOICE_ENROL_MS = 25_000
 /** Answers to "shall I proceed". Anything that is neither is not an answer. */
@@ -181,6 +186,16 @@ export default function App() {
   const voiceHandlers = useRef<Parameters<typeof startVoice>[0] | null>(null)
   // The badge on the HUD unmutes by event, since it lives outside this component.
   const unmuteRef = useRef<() => void>(() => {})
+  // Ends focus mode when its time is up; held in a ref so the timer below,
+  // set once, always calls the current closure.
+  const endFocusRef = useRef<(early: boolean) => void>(() => {})
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const until = store.getState().focusUntil
+      if (until && Date.now() >= until) endFocusRef.current(false)
+    }, 5000)
+    return () => clearInterval(timer)
+  }, [])
   useEffect(() => {
     const on = () => unmuteRef.current()
     window.addEventListener('jarvis-unmute', on)
@@ -671,6 +686,8 @@ export default function App() {
   const sayDue = async () => {
     const s = store.getState()
     if (!dueQueue.current.length || s.locked) return
+    // Focus mode holds everything until it ends; then it all comes at once.
+    if (s.focusUntil > Date.now()) return
     if (s.phase !== 'dormant' && s.phase !== 'listening') return
     const reminder = dueQueue.current.shift()!
     if (reminder.briefing) return void brief(tr('Good morning'))
@@ -720,6 +737,41 @@ export default function App() {
   }
 
   /** Put the list of things to say on screen, and say that it is there. */
+  /**
+   * Focus mode: a countdown on the HUD, every reminder, alert and offer held
+   * until it ends, and at the end one sentence on what arrived meanwhile.
+   */
+  const startFocus = async (said: string) => {
+    const m = FOCUS_CMD.exec(said)
+    const n = m?.[1] === 'meia' ? 30 : m?.[1] === 'uma' ? 1 : Number(m?.[1] ?? 0)
+    const minutes = !n ? 50 : /hora/i.test(m?.[2] ?? '') ? (m?.[1] === 'meia' ? 30 : n * 60) : n
+    const s = store.getState()
+    ++turn.current
+    clearIdle()
+    s.setFocusUntil(Date.now() + minutes * 60_000)
+    s.setPhase('speaking')
+    await announce(`${tr('Focus mode for')} ${minutes} ${tr('minutes, sir. I shall hold everything until then.')}`)
+    goDormant()
+  }
+
+  const endFocus = async (early: boolean) => {
+    const s = store.getState()
+    if (!s.focusUntil) return
+    s.setFocusUntil(0)
+    const held = dueQueue.current.length
+    ++turn.current
+    clearIdle()
+    s.setPhase('speaking')
+    await announce(
+      held
+        ? `${tr(early ? 'Focus mode ended, sir.' : 'Focus time is over, sir.')} ${held} ${tr(held === 1 ? 'thing arrived meanwhile.' : 'things arrived meanwhile.')}`
+        : tr(early ? 'Focus mode ended, sir. Nothing arrived.' : 'Focus time is over, sir. Nothing arrived meanwhile.'),
+    )
+    goDormant()
+    void sayDue()
+  }
+  endFocusRef.current = (early: boolean) => void endFocus(early)
+
   const showHelp = async () => {
     const mine = ++turn.current
     clearIdle()
@@ -739,6 +791,8 @@ export default function App() {
     if (LOCK_CMD.test(said)) return void lock()
     if (ENROL_CMD.test(said)) return void enrolFace()
     if (MUTE_CMD.test(said)) return void mute()
+    if (FOCUS_END_CMD.test(said)) return void endFocus(true)
+    if (FOCUS_CMD.test(said)) return void startFocus(said)
     if (VOICE_ENROL_CMD.test(said)) return void enrolVoice()
     if (VOICE_FORGET_CMD.test(said)) return void forgetVoice()
     if (BRIEF_CMD.test(said)) return void brief(said)
