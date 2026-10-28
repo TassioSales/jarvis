@@ -28,7 +28,10 @@ const PT = /^pt/i.test(LANG)
 
 /** Long enough for a healthy answer, short enough that a hung request costs
  *  the user less than simply having asked Claude in the first place. */
-const TIMEOUT_MS = 3500
+// Measured from the traces (bridge/traces.mjs): a warm answer takes about
+// three seconds, so 3.5 s sent every slow one to Claude — at roughly twenty
+// cents of API-equivalent cost for "how much is twelve times twelve".
+const TIMEOUT_MS = 5000
 
 export const geminiReady = () => Boolean(KEY)
 export const geminiModel = () => MODEL
@@ -223,4 +226,10 @@ ${talk}`
   } catch {
     return []
   }
+}
+
+/** One throwaway request at start-up, so the first real question is not the cold one. */
+export function warmGemini() {
+  if (!KEY) return
+  void quick([], 'Diga apenas: ok.').catch(() => {})
 }

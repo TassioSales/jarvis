@@ -34,7 +34,7 @@ import {
   weather,
   worldNote,
 } from './feeds.mjs'
-import { transcribe, geminiModel, geminiReady, quick } from './gemini.mjs'
+import { transcribe, geminiModel, geminiReady, quick, warmGemini } from './gemini.mjs'
 import { dueReminders, listReminders } from './reminders.mjs'
 import { system } from './system.mjs'
 import { agenda, agendaNote, agendaReady } from './agenda.mjs'
@@ -1880,6 +1880,7 @@ const RESULT_FAILURES = {
  * started.
  */
 let lastAlertCheck = 0
+warmGemini()
 // The calendar, kept warm so the prompts and the watcher have it without waiting.
 if (agendaReady()) {
   void agenda()
