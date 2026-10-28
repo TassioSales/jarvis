@@ -122,7 +122,7 @@ function useClock(everyMs = 1000) {
 
 const deg = (n: number) => `${Math.round(n)}°`
 const secs = (ms: number | null | undefined) => (ms == null ? '—' : `${(ms / 1000).toFixed(1)} s`)
-const usd = (n: number | null | undefined) => (n == null ? '—' : `US$ ${n.toFixed(n < 1 ? 3 : 2)}`)
+const usd = (n: number | null | undefined) => (n == null ? '—' : `$${n.toFixed(2)}`)
 const hour = (iso: string) => `${iso.slice(11, 13)}h`
 const pad = (n: number) => String(n).padStart(2, '0')
 
@@ -639,14 +639,14 @@ export function CoreView({ state }: { state: Snapshot }) {
                 <dt>{t('API-equivalent cost')}</dt>
                 <dd>
                   {usd(status?.traces?.today.cost)}
-                  <small> {t('today')} · {usd(status?.traces?.month.cost)} {t('30 days')}</small>
+                  <small> · 30d {usd(status?.traces?.month.cost)}</small>
                 </dd>
               </div>
               <div>
                 <dt>{t('saved by the quick brain')}</dt>
                 <dd className="hx-saved">
                   ~{usd(status?.traces?.month.saved)}
-                  <small> {t('30 days')}</small>
+                  <small> · 30d</small>
                 </dd>
               </div>
             </dl>
