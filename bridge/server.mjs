@@ -40,7 +40,7 @@ import { system } from './system.mjs'
 import { agenda, agendaNote, agendaReady } from './agenda.mjs'
 import { dueAlert } from './watch.mjs'
 import { recordTrace, traceSummary } from './traces.mjs'
-import { catchUp, diaryNote, diaryServer, diaryTick, logTurn } from './diary.mjs'
+import { catchUp, DIARY_DIR, diaryNote, diaryServer, diaryTick, logTurn } from './diary.mjs'
 import { localModel, localQuick, localReady, localReadyNow, warmLocal } from './local.mjs'
 import { control, doServer, mediaSession, routineSteps } from './doer.mjs'
 import { mapsReady, mapsServer, routeSummary } from './maps.mjs'
@@ -1770,6 +1770,15 @@ async function todayReport() {
     habits: learnedHabits,
     notes,
     facts: memoryFacts().slice(-6),
+    // For the constellation: everything known, and how many days the diary holds.
+    allFacts: memoryFacts(),
+    diaryDays: (() => {
+      try {
+        return readdirSync(DIARY_DIR).filter((f) => /^\d{4}-\d{2}-\d{2}\.md$/.test(f)).length
+      } catch {
+        return 0
+      }
+    })(),
     playing: playing.value,
     commute: commute.value,
     commuteSet: Boolean(home && work),

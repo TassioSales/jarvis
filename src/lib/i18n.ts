@@ -102,6 +102,7 @@ const PT: Record<string, string> = {
   OVERVIEW: 'PANORAMA',
   'LOCAL TIME': 'HORA LOCAL',
   'answers today': 'respostas hoje',
+  'diary days': 'dias no diário',
   quick: 'rápido',
   'typical wait': 'espera típica',
   'API-equivalent cost': 'custo equivalente na API',

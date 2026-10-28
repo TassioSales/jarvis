@@ -8,6 +8,7 @@ import { BarChart, LineChart } from './charts'
 import { SkyIcon } from './glyphs'
 import { Dot, Frame, Ring, Segments, Spark, SunArc, Ticker, type Lamp } from './hx'
 import { bytes } from './format'
+import { Constellation } from './Constellation'
 import './monitors.css'
 
 /**
@@ -45,6 +46,8 @@ type Today = {
   habits: { time: string; desc: string; days: number }[]
   notes: { title: string; at: string }[]
   facts: string[]
+  allFacts?: string[]
+  diaryDays?: number
   playing: { app: string; status: string; artist: string; title: string } | null
   commute: { from: string; to: string; minutes: number; km: number; delay: number; usual: number | null; toWork: boolean } | null
   commuteSet: boolean
@@ -426,8 +429,20 @@ export function DayView() {
         )}
       </Frame>
 
-      <Frame className="hx-learn" code="09" title={t('LEARNED')} aside={today ? `${today.habits.length} ${t('habits')} · ${today.facts.length} ${t('facts')}` : undefined}>
-        {today && (today.habits.length || today.facts.length) ? (
+      <Frame
+        className="hx-learn"
+        code="09"
+        title={t('LEARNED')}
+        aside={today ? `${today.habits.length} ${t('habits')} · ${(today.allFacts ?? today.facts).length} ${t('facts')} · ${today.diaryDays ?? 0} ${t('diary days')}` : undefined}
+      >
+        {today && (today.habits.length || today.facts.length || today.diaryDays) ? (
+          <div className="hx-learn-body">
+          <Constellation
+            facts={(today.allFacts ?? today.facts).map((f) => f.replace(/\s*\(aprendido\)$/, ''))}
+            habits={today.habits.map((h) => `~${h.time} ${h.desc}`)}
+            days={today.diaryDays ?? 0}
+            centre={t('YOU')}
+          />
           <ul className="hx-list hx-list-tight">
             {today.habits.map((h) => (
               <li key={h.desc}>
@@ -444,6 +459,7 @@ export function DayView() {
               </li>
             ))}
           </ul>
+          </div>
         ) : (
           <Hint>{t('She learns your habits and what you tell her about yourself. In a few days, they appear here.')}</Hint>
         )}
