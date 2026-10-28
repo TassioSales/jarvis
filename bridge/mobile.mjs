@@ -163,13 +163,22 @@ export function startMobile() {
     if (url.pathname === '/m' && url.searchParams.has('k')) {
       if (!same(url.searchParams.get('k'), KEY)) {
         res.writeHead(401, { 'content-type': 'text/html; charset=utf-8' })
-        return res.end(NOT_PAIRED)
+        return res.end(NOT_PAIRED.replace('ainda não foi pareado', 'leu um código antigo ou incompleto'))
       }
-      res.writeHead(302, {
-        'set-cookie': `jt=${KEY}; HttpOnly; SameSite=Strict; Path=/m; Max-Age=31536000`,
-        location: '/m',
+      // The page itself, not a redirect to it. A page opened from the camera
+      // app is a navigation from outside, and a SameSite=Strict cookie set on
+      // it was not sent on the redirect that followed — so the phone was told,
+      // straight after pairing, that it was not paired. Lax is sent on
+      // top-level navigations; the key in the address bar is removed by the
+      // page with replaceState.
+      res.writeHead(200, {
+        'set-cookie': `jt=${KEY}; HttpOnly; SameSite=Lax; Path=/m; Max-Age=31536000`,
+        'content-type': 'text/html; charset=utf-8',
+        'cache-control': 'no-store',
+        'x-frame-options': 'DENY',
+        'referrer-policy': 'no-referrer',
       })
-      return res.end()
+      return res.end(PAGE.replace('<script>', "<script>history.replaceState(null,'','/m');"))
     }
     if (!same(cookieOf(req), KEY)) {
       res.writeHead(401, { 'content-type': 'text/html; charset=utf-8' })
