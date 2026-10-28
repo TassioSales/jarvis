@@ -131,6 +131,33 @@ export async function enrol(): Promise<number> {
   }
 }
 
+/**
+ * A quick look, for presence: is he there? 'match' needs an enrolled face;
+ * without one, any face counts as 'face'. Short — the camera light is on for
+ * as long as this takes.
+ */
+export async function glance(timeoutMs = 1600): Promise<'match' | 'face' | 'nobody'> {
+  const mine = known()
+  const faceapi = await load()
+  const video = await holdCamera()
+  try {
+    const deadline = Date.now() + timeoutMs
+    let sawFace = false
+    while (Date.now() < deadline) {
+      const d = await describe(faceapi, video)
+      if (d) {
+        sawFace = true
+        if (!mine.length) return 'face'
+        if (Math.min(...mine.map((k) => faceapi.euclideanDistance(k, d))) < MATCH_DISTANCE) return 'match'
+      }
+      await sleep(150)
+    }
+    return sawFace ? 'face' : 'nobody'
+  } finally {
+    releaseCamera()
+  }
+}
+
 export type Verdict = 'match' | 'stranger' | 'nobody'
 
 /**

@@ -174,6 +174,13 @@ export const ORB = choice(
  * For working out why he did not respond; see voiceLog in voice.ts. Off by
  * default — it is a transcript of the room.
  */
+/**
+ * Presence: a glance through the camera every 45 s while she is idle, to
+ * notice him sitting down (good morning, welcome back) and getting up (lock).
+ * The camera light blinks with each glance; VITE_JARVIS_PRESENCE=0 stops it.
+ */
+export const PRESENCE = flag('VITE_JARVIS_PRESENCE', import.meta.env.VITE_JARVIS_PRESENCE, true)
+
 export const VOICE_LOG = flag('VITE_JARVIS_VOICE_LOG', import.meta.env.VITE_JARVIS_VOICE_LOG, false)
 
 /** The language without its region — `pt` for `pt-BR`. */

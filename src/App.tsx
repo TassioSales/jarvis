@@ -34,7 +34,7 @@ import {
   type Scene as BriefScene,
 } from './lib/briefing'
 import * as kokoro from './lib/kokoro'
-import { BRIDGE_HTTP_URL, ORB, TTS_ENGINE } from './config'
+import { BRIDGE_HTTP_URL, ORB, PRESENCE, TTS_ENGINE } from './config'
 import { forTool, attention } from './lib/fillers'
 import {
   ask,
@@ -189,6 +189,24 @@ export default function App() {
   // Ends focus mode when its time is up; held in a ref so the timer below,
   // set once, always calls the current closure.
   const endFocusRef = useRef<(early: boolean) => void>(() => {})
+  // Presence by camera: when he was last seen, and whether this morning's
+  // briefing has been given (remembered across reloads for the day).
+  const presence = useRef({
+    lastSeen: 0,
+    morning: (() => {
+      try {
+        return localStorage.getItem('jarvis.morning') ?? ''
+      } catch {
+        return ''
+      }
+    })(),
+  })
+  const presenceRef = useRef<() => void>(() => {})
+  useEffect(() => {
+    if (!PRESENCE) return
+    const timer = setInterval(() => presenceRef.current(), 45_000)
+    return () => clearInterval(timer)
+  }, [])
   useEffect(() => {
     const timer = setInterval(() => {
       const until = store.getState().focusUntil
@@ -585,6 +603,15 @@ export default function App() {
    * leaves what has been shown on screen.
    */
   const brief = async (said: string) => {
+    // Asked for or given on sight, it counts as this morning's briefing.
+    if (new Date().getHours() < 11) {
+      presence.current.morning = new Date().toDateString()
+      try {
+        localStorage.setItem('jarvis.morning', presence.current.morning)
+      } catch {
+        /* private window */
+      }
+    }
     const mine = ++turn.current
     const stale = () => mine !== turn.current
     clearIdle()
@@ -771,6 +798,65 @@ export default function App() {
     void sayDue()
   }
   endFocusRef.current = (early: boolean) => void endFocus(early)
+
+  /**
+   * Presence. Every 45 s, while she is idle, one short glance through the
+   * camera. Back after ten minutes away: unlocked if locked, welcomed, and
+   * told what arrived meanwhile. Gone for ten minutes: locked. The first time
+   * he is seen on a morning: the briefing, once a day.
+   */
+  const presenceTick = async () => {
+    const s = store.getState()
+    if (!PRESENCE || s.muted || document.hidden) return
+    if (s.phase !== 'dormant' || s.identity === 'scanning' || speaker.current) return
+    if (s.focusUntil > Date.now()) return
+    let seen: 'match' | 'face' | 'nobody'
+    try {
+      seen = await face.glance()
+    } catch {
+      return // no camera, or it is busy: nothing to conclude
+    }
+    const now = Date.now()
+    const isHim = seen === 'match' || (seen === 'face' && !face.enrolled())
+    const st = store.getState()
+    if (isHim) {
+      const away = presence.current.lastSeen ? now - presence.current.lastSeen : 0
+      presence.current.lastSeen = now
+      const today = new Date().toDateString()
+      const hour = new Date().getHours()
+      if (presence.current.morning !== today && hour >= 5 && hour < 11) {
+        presence.current.morning = today
+        try {
+          localStorage.setItem('jarvis.morning', today)
+        } catch {
+          /* private window */
+        }
+        if (st.locked) await unlock('')
+        return void brief(tr('Good morning'))
+      }
+      if (away >= 10 * 60_000) {
+        if (st.locked) await unlock('')
+        const held = dueQueue.current.length
+        ++turn.current
+        st.setPhase('speaking')
+        await announce(
+          held
+            ? `${tr('Welcome back, sir.')} ${held} ${tr(held === 1 ? 'thing arrived while you were away.' : 'things arrived while you were away.')}`
+            : tr('Welcome back, sir.'),
+        )
+        goDormant()
+        void sayDue()
+      }
+    } else if (
+      face.enrolled() &&
+      !st.locked &&
+      presence.current.lastSeen &&
+      now - presence.current.lastSeen >= 10 * 60_000
+    ) {
+      void lock()
+    }
+  }
+  presenceRef.current = () => void presenceTick()
 
   const showHelp = async () => {
     const mine = ++turn.current
