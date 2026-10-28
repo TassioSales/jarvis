@@ -22,7 +22,10 @@
  */
 
 const KEY = process.env.GEMINI_API_KEY?.trim()
-const MODEL = process.env.JARVIS_GEMINI_MODEL ?? 'gemini-flash-lite-latest'
+// A pinned model, not a "-latest" alias. The alias moved to a model that
+// thinks before it answers, and a two-word reply went from under a second to
+// ten — every quick question timed out into Claude. Measured: this one 0.6 s.
+const MODEL = process.env.JARVIS_GEMINI_MODEL ?? 'gemini-2.5-flash-lite'
 const LANG = process.env.JARVIS_LANG ?? process.env.VITE_JARVIS_LANG ?? 'en-GB'
 const PT = /^pt/i.test(LANG)
 
@@ -107,7 +110,7 @@ export async function quick(history, question, opts = {}) {
         body: JSON.stringify({
           systemInstruction: { parts: [{ text: system }] },
           contents,
-          generationConfig: { temperature: 0.4, maxOutputTokens: 220 },
+          generationConfig: { temperature: 0.4, maxOutputTokens: 220, thinkingConfig: { thinkingBudget: 0 } },
         }),
       },
     )
