@@ -281,7 +281,11 @@ function makeAssembler(h: {
         return
       }
 
-      const unfinished = typeof complete === 'number' && complete < UNFINISHED
+      // Only when the words do not already say it is over. In real use the
+      // model scored finished questions — "Onde você está?" — at 0.005, and
+      // every one of them waited 1.6 s for a continuation that never came.
+      const unfinished =
+        typeof complete === 'number' && complete < UNFINISHED && !/[.!?…]["')\]]*$/.test(held.trim())
       const wait = Math.min(
         unfinished ? Math.max(holdFor(held), CONTINUE_MS) : holdFor(held),
         Math.max(0, MAX_HOLD_MS - (Date.now() - firstAt)),

@@ -9,7 +9,7 @@ one clip in a POST to /stt, and answers {"text": "..."}.
 
 Settings, all optional (read from the environment, which start.mjs fills
 from .env.local):
-    JARVIS_STT_MODEL   whisper model size or path   (default: medium)
+    JARVIS_STT_MODEL   whisper model size or path   (default: small)
     JARVIS_STT_DEVICE  cuda | cpu                   (default: cuda, falls back to cpu)
     JARVIS_STT_PORT    port on 127.0.0.1            (default: 8790)
     JARVIS_LANG        e.g. pt-BR                   (default: pt-BR)
@@ -43,7 +43,10 @@ add_cuda_dlls()
 from faster_whisper import WhisperModel, decode_audio  # noqa: E402
 from faster_whisper.feature_extractor import FeatureExtractor  # noqa: E402
 
-MODEL = os.environ.get("JARVIS_STT_MODEL", "medium")
+# small, with her name as a hint: 0.6 s a phrase on a GTX 1650 against 1.5 s
+# for medium, and in testing the same words but for one band name. Speed is
+# what the voice loop was short of. JARVIS_STT_MODEL=medium to trade back.
+MODEL = os.environ.get("JARVIS_STT_MODEL", "small")
 DEVICE = os.environ.get("JARVIS_STT_DEVICE", "cuda")
 PORT = int(os.environ.get("JARVIS_STT_PORT", "8790"))
 LANG = (os.environ.get("JARVIS_LANG") or os.environ.get("VITE_JARVIS_LANG") or "pt-BR").split("-")[0].lower()
@@ -190,6 +193,7 @@ def transcribe(audio: bytes, enrol=False):
             beam_size=1,
             vad_filter=True,
             condition_on_previous_text=False,
+            without_timestamps=True,
             # Her name, as a hint. Without it, Whisper set to Portuguese hears
             # the English word as the weekday and translates it — "Wednesday"
             # came back "sexta-feira". A bare name in a prompt can make Whisper

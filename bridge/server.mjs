@@ -1444,7 +1444,16 @@ const handleRequest = async (req, res) => {
         return false
       }
     }
-    if ((req.headers['x-voice'] === 'local' || !key || Date.now() < ttsRestUntil) && (await viaLocal())) return
+    // The local voice is opt-in (JARVIS_LOCAL_TTS=1): it takes about two
+    // seconds a sentence on this CPU, heard as a pause before each one, while
+    // the browser's own neural voice starts at once. Without it, a refusal
+    // from the cloud goes back to the HUD, which then speaks for itself.
+    const localTts = process.env.JARVIS_LOCAL_TTS === '1'
+    if (localTts && (req.headers['x-voice'] === 'local' || !key || Date.now() < ttsRestUntil) && (await viaLocal())) return
+    if (!key || Date.now() < ttsRestUntil) {
+      res.writeHead(503, cors)
+      return res.end('cloud voice resting')
+    }
     if (!key) {
       res.writeHead(503, cors)
       return res.end('no voice available')
@@ -1484,7 +1493,7 @@ const handleRequest = async (req, res) => {
         // Out of credit: leave the cloud alone for a while and speak locally.
         if ([401, 402, 429].includes(upstream.status)) {
           ttsRestUntil = Date.now() + 15 * 60_000
-          if (await viaLocal()) return
+          if (localTts && (await viaLocal())) return
         }
         res.writeHead(upstream.status, cors)
         return res.end(why)
@@ -1679,7 +1688,7 @@ async function statusReport() {
       : stats.voice === 'unknown'
         ? { state: 'warn', detail: 'ainda não usada' }
         : stats.voice === 'no credit'
-          ? { state: 'warn', detail: 'sem crédito · usando a voz local' }
+          ? { state: 'warn', detail: 'sem crédito · usando a voz do Edge' }
           : { state: 'down', detail: stats.voice }
   return {
     model: MODEL,
@@ -1710,7 +1719,7 @@ async function statusReport() {
         id: 'localvoice',
         label: 'Voz local',
         state: stats.spoken.local ? 'ok' : ears ? 'warn' : 'off',
-        detail: stats.spoken.local ? `Kokoro · ${stats.spoken.local} frases` : ears ? 'Kokoro · pronta' : 'indisponível',
+        detail: stats.spoken.local ? `Kokoro · ${stats.spoken.local} frases` : process.env.JARVIS_LOCAL_TTS === '1' ? 'Kokoro · pronta' : 'desligada · voz do Edge',
       },
       { id: 'maps', label: 'Mapas', state: mapsReady() ? 'ok' : 'off', detail: mapsReady() ? 'TomTom' : 'sem chave' },
       { id: 'calendar', label: 'Agenda', state: agendaReady() ? 'ok' : 'off', detail: agendaReady() ? 'Google Agenda · iCal' : 'sem link iCal' },

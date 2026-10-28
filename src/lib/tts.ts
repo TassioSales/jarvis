@@ -432,9 +432,12 @@ export function createSpeaker(opts: { local?: boolean } = {}): Speaker {
     // `nativeBroken` latches on once the system voice has proved unusable.
     // Long recitals go to the neural voice on this machine (the bridge's
     // local helper), and only if that is missing to the system voice.
-    if (opts.local) {
-      diag.engine = 'local'
-      return fetchCloudAudio(text, true).catch(() => null)
+    // Long recitals in the system voice: Edge's neural voices start at once,
+    // and the local helper's took about two seconds a sentence — heard as a
+    // pause before every one.
+    if (opts.local && !nativeBroken) {
+      diag.engine = 'system'
+      return null
     }
     if (USE_ELEVENLABS || caps().tts || nativeBroken) {
       // Recorded at the moment the tier is chosen rather than only when the
@@ -807,7 +810,7 @@ async function fetchCloudAudio(text: string, local = false): Promise<string | nu
         body: JSON.stringify({ text }),
       })
       if (res.ok) return URL.createObjectURL(await res.blob())
-      if ([401, 402, 429].includes(res.status)) {
+      if ([401, 402, 429, 503].includes(res.status)) {
         cloudRestUntil = Date.now() + 15 * 60_000
         return null
       }
