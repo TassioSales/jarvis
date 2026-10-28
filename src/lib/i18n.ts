@@ -42,6 +42,16 @@ const PT: Record<string, string> = {
 
   // Suggestions
   try: 'experimente',
+  'how is the traffic to work': 'como está o trânsito até o trabalho',
+  "what's on my calendar today": 'o que eu tenho na agenda hoje',
+  'play something by Iron Maiden': 'toca alguma coisa do Iron Maiden',
+  'remind me at six to call João': 'me lembra às seis de ligar pro João',
+  'focus mode for 25 minutes': 'modo foco por 25 minutos',
+  'what does this error on my screen say': 'o que diz esse erro na minha tela',
+  "what's the weather this weekend": 'como vai estar o tempo no fim de semana',
+  'learn my voice': 'aprende a minha voz',
+  'what did I do yesterday': 'o que eu fiz ontem',
+  'summarise the news of the day': 'resume as notícias do dia',
   'what happened in AI this week': 'o que aconteceu em IA esta semana',
   'generate an image of the Mark Seven suit': 'gere uma imagem da armadura Mark Sete',
   'take a screenshot of my phone': 'tire uma captura de tela do meu celular',

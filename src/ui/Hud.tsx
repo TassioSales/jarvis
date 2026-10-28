@@ -8,7 +8,35 @@ import { Pointer } from './Pointer'
 import { GestureGuide } from './GestureGuide'
 import { HoloRings } from './HoloRings'
 import { t as tr } from '../lib/i18n'
-import { BRIDGE_HTTP_URL } from '../config'
+import { BRIDGE_HTTP_URL, LANG } from '../config'
+import { sky as skyLabel } from '../lib/weather'
+
+/** The hour, the date and the sky, under her name: the main screen had none. */
+function BrandClock({ sky }: { sky: RailSky | null }) {
+  const [now, setNow] = useState(() => new Date())
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 1000)
+    return () => clearInterval(timer)
+  }, [])
+  return (
+    <div className="brand-clock">
+      <b>
+        {String(now.getHours()).padStart(2, '0')}
+        <i>:</i>
+        {String(now.getMinutes()).padStart(2, '0')}
+      </b>
+      <span>
+        {now.toLocaleDateString(LANG, { weekday: 'short', day: 'numeric', month: 'short' }).replace(/\./g, '')}
+        {sky && (
+          <>
+            {' · '}
+            {Math.round(sky.now.temp)}° {tr(skyLabel(sky.now.code)).toLowerCase()}
+          </>
+        )}
+      </span>
+    </div>
+  )
+}
 
 /**
  * A bridge endpoint, read on a timer, for the rails. The main window keeps
@@ -36,7 +64,7 @@ function useBridge<T>(path: string, everyMs: number): T | null {
 
 type RailStatus = { services: { id: string; label: string; state: 'ok' | 'warn' | 'down' | 'off'; detail: string }[] }
 type RailSystem = { cpu: { now: number }; mem: { used: number; total: number }; gpu: { util: number | null; temp: number | null } | null }
-type RailSky = { city: string; now: { temp: number; humidity: number } }
+type RailSky = { city: string; now: { temp: number; humidity: number; code: number } }
 
 const statusText: Record<Phase, string> = {
   offline: 'OFFLINE',
@@ -237,6 +265,7 @@ export function Hud() {
           <div className="brand">
             <span className="brand-mark">WEDNESDAY</span>
             <span className="brand-sub">{tr('Personal assistant · neural core')}</span>
+            <BrandClock sky={railSky} />
           </div>
         )}
 

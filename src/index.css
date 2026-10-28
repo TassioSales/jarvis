@@ -19,8 +19,12 @@ body,
 #root {
   margin: 0;
   height: 100%;
-  background: var(--bg);
   overflow: hidden;
+}
+/* Only the root paints a colour: body and #root stay clear so the sky behind
+   everything (ui/Ambience.tsx, z-index -1) shows through. */
+html {
+  background: var(--bg);
 }
 
 /* Holographic blueprint grid + scanlines + ambient vignette */
@@ -2089,10 +2093,13 @@ kbd {
 .amb-rain {
   position: fixed;
   inset: 0;
+  /* A canvas does not stretch to its insets; it has to be told. */
+  width: 100%;
+  height: 100%;
   pointer-events: none;
   z-index: 1;
 }
-.amb-night {
+.amb-late {
   position: fixed;
   inset: 0;
   pointer-events: none;
@@ -2113,4 +2120,159 @@ kbd {
   30% { opacity: 0.35; }
   45% { opacity: 0.9; }
   100% { opacity: 0; }
+}
+
+/* ------------------------------------------------------------- the sky
+   Behind the transparent 3D scene (z-index 1). Gradients are muted on
+   purpose: this is a backdrop for a HUD, not a wallpaper. */
+.amb-sky {
+  position: fixed;
+  inset: 0;
+  /* Beneath everything: the orb has no z-index of its own and sits at the
+     base layer, so a sky at 0 painted over it. */
+  z-index: -1;
+  pointer-events: none;
+  overflow: hidden;
+  transition: background 4s ease;
+}
+.amb-night {
+  background: radial-gradient(ellipse at 50% 120%, #0b1a3a 0%, #040a1c 45%, #01040c 100%);
+}
+.amb-dawn {
+  background: linear-gradient(180deg, #1a1030 0%, #4a2440 38%, #8a4a4a 70%, #c7785a 100%);
+}
+.amb-morning {
+  background: linear-gradient(180deg, #06223a 0%, #0b3d5c 45%, #12607a 100%);
+}
+.amb-noon {
+  background: linear-gradient(180deg, #032a3e 0%, #06465e 50%, #0a6a80 100%);
+}
+.amb-afternoon {
+  background: linear-gradient(180deg, #05263a 0%, #0c4258 50%, #2a6a70 100%);
+}
+.amb-golden {
+  background: linear-gradient(180deg, #14213a 0%, #3a3a4a 40%, #8a6a3a 80%, #b8843a 100%);
+}
+.amb-dusk {
+  background: linear-gradient(180deg, #0c0c2a 0%, #3a1a4a 40%, #8a3a4a 75%, #c45a3a 100%);
+}
+/* A dark veil over every sky, so the HUD keeps its contrast. */
+.amb-sky::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at center, rgb(1 6 12 / 0.38) 0%, rgb(1 6 12 / 0.62) 70%, rgb(1 6 12 / 0.8) 100%);
+}
+
+.amb-stars {
+  position: absolute;
+  inset: 0;
+}
+.amb-star {
+  position: absolute;
+  border-radius: 50%;
+  background: #dff4ff;
+  box-shadow: 0 0 4px #9fd8ff;
+}
+.amb-tw0 { animation: amb-twinkle 4.2s ease-in-out infinite; }
+.amb-tw1 { animation: amb-twinkle 6.1s ease-in-out 1.3s infinite; }
+.amb-tw2 { animation: amb-twinkle 5.3s ease-in-out 2.6s infinite; }
+@keyframes amb-twinkle {
+  0%, 100% { opacity: 0.85; }
+  50% { opacity: 0.15; }
+}
+
+.amb-sun {
+  position: absolute;
+  width: 34vmin;
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: radial-gradient(circle, rgb(255 236 190 / 0.55) 0%, rgb(255 200 120 / 0.22) 22%, transparent 62%);
+  transition: left 30s linear, top 30s linear, opacity 6s ease;
+}
+.amb-rays {
+  position: absolute;
+  inset: -40%;
+  border-radius: 50%;
+  background: repeating-conic-gradient(from 0deg, rgb(255 220 160 / 0.07) 0deg 4deg, transparent 4deg 16deg);
+  mask-image: radial-gradient(circle, #000 18%, transparent 62%);
+  animation: hx-turn 120s linear infinite;
+  will-change: transform;
+}
+
+.amb-clouds {
+  position: absolute;
+  inset: 0;
+  transition: opacity 6s ease;
+}
+.amb-cloud {
+  position: absolute;
+  left: -60%;
+  width: 220%;
+  height: 40%;
+  background:
+    radial-gradient(ellipse 18% 55% at 12% 50%, rgb(200 222 235 / 0.22), transparent 70%),
+    radial-gradient(ellipse 22% 60% at 34% 40%, rgb(200 222 235 / 0.19), transparent 70%),
+    radial-gradient(ellipse 16% 50% at 55% 60%, rgb(200 222 235 / 0.2), transparent 70%),
+    radial-gradient(ellipse 24% 58% at 78% 45%, rgb(200 222 235 / 0.18), transparent 70%);
+  filter: blur(6px);
+  will-change: transform;
+}
+.amb-c1 { top: 4%; animation: amb-drift 160s linear infinite; }
+.amb-c2 { top: 22%; animation: amb-drift 230s linear infinite reverse; opacity: 0.8; }
+.amb-c3 { top: 46%; animation: amb-drift 300s linear infinite; opacity: 0.6; }
+@keyframes amb-drift {
+  from { transform: translateX(0); }
+  to { transform: translateX(45%); }
+}
+
+.amb-fog {
+  position: absolute;
+  inset: 45% 0 0;
+  background: linear-gradient(180deg, transparent, rgb(170 200 215 / 0.16) 60%, rgb(170 200 215 / 0.22));
+  filter: blur(10px);
+}
+
+.amb-flash {
+  position: fixed;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  background: rgb(200 225 255 / 0.5);
+  animation: amb-flash 0.9s ease-out forwards;
+}
+@keyframes amb-flash {
+  0% { opacity: 0; }
+  6% { opacity: 1; }
+  14% { opacity: 0.15; }
+  22% { opacity: 0.85; }
+  100% { opacity: 0; }
+}
+
+/* The time and the sky, under her name on the main screen. */
+.brand-clock {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin-top: 14px;
+}
+.brand-clock b {
+  font-weight: 300;
+  font-size: clamp(26px, 3.4vmin, 44px);
+  letter-spacing: 0.04em;
+  color: #e6fbff;
+  text-shadow: 0 0 18px color-mix(in srgb, var(--accent) 60%, transparent);
+}
+.brand-clock b i {
+  font-style: normal;
+  color: var(--accent);
+  animation: rail-blink 2s steps(2) infinite;
+}
+.brand-clock span {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  opacity: 0.7;
 }

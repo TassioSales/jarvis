@@ -12,17 +12,19 @@ import { t } from '../lib/i18n'
  *
  * Each line is phrased the way you'd actually say it, not as a feature name.
  */
+// Things she does now, as he would say them — not the original demo's list,
+// half of which (an image of the Mark VII suit, his phone's screen) she cannot.
 const EXAMPLES = [
-  'what happened in AI this week',
-  'generate an image of the Mark Seven suit',
-  'take a screenshot of my phone',
-  "what's on my calendar tomorrow",
-  'search for the best coffee near me',
-  'read me the top story on Hacker News',
-  'open my GitHub notifications',
-  "summarise what's in my inbox",
-  'find me a loading animation',
-  "what's the weather looking like",
+  'how is the traffic to work',
+  "what's on my calendar today",
+  'play something by Iron Maiden',
+  'remind me at six to call João',
+  'focus mode for 25 minutes',
+  'what does this error on my screen say',
+  "what's the weather this weekend",
+  'learn my voice',
+  'what did I do yesterday',
+  'summarise the news of the day',
 ]
 
 const ROTATE_MS = 4200
@@ -53,7 +55,7 @@ export function Suggestions() {
           exit={{ opacity: 0, y: -6 }}
           transition={{ duration: 0.35 }}
         >
-          “jarvis, {t(EXAMPLES[i])}”
+          “wednesday, {t(EXAMPLES[i])}”
         </motion.span>
       </AnimatePresence>
     </div>
