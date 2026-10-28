@@ -84,7 +84,9 @@ const SPEAKING_GRACE_MS = 28000
 /** After an answer, how long the mic stays open for a follow-up before he
  *  drops back to standby. Long enough that you don't have to say the name
  *  again to continue a thought. */
-const FOLLOW_UP_MS = 20000
+// Short: a longer window let the rest of the house become questions ("parabéns
+// para o meu esposo" was answered). After it, her name starts a new turn.
+const FOLLOW_UP_MS = 8000
 
 /** crypto.randomUUID needs a secure context, which a LAN address over plain
  *  http is not. Not worth failing a whole turn over an id. */

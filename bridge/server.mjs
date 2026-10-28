@@ -1919,7 +1919,8 @@ let lastAlertCheck = 0
 warmGemini()
 // The phone page, on the home network, for paired phones only (mobile.mjs).
 startMobile()
-void warmLocal()
+// Not preloaded: resident, it held 2.3 GB of a 4 GB card the transcriber needs.
+// It loads on the first question it is actually asked.
 // Yesterday's page, if the machine was off at 23:30.
 void catchUp()
 // The calendar, kept warm so the prompts and the watcher have it without waiting.

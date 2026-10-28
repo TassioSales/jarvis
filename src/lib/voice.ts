@@ -676,7 +676,10 @@ async function startElevenVoice(h: VoiceHandlers): Promise<Voice> {
 
       // Woken only by the owner, once his voice is known. A clip too short to
       // judge carries no score and is let through.
-      if (mode === 'wake' && typeof speaker === 'number' && speaker < OWNER_MIN) {
+      // Once his voice is known, someone else's is ignored in conversation too,
+      // not only for waking: in a full house the follow-up window picked up
+      // whoever spoke next.
+      if (typeof speaker === 'number' && speaker < OWNER_MIN) {
         drop(`not the owner's voice (${speaker.toFixed(2)})`)
         return
       }

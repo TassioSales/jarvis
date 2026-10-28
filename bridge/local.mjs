@@ -40,7 +40,7 @@ export async function warmLocal() {
   if (!(await localReady())) return
   fetch(`${OLLAMA}/api/generate`, {
     method: 'POST',
-    body: JSON.stringify({ model: MODEL, prompt: '', keep_alive: '60m' }),
+    body: JSON.stringify({ model: MODEL, prompt: '', keep_alive: '2m' }),
   }).catch(() => {})
 }
 
@@ -92,7 +92,7 @@ export async function localQuick(history, question, opts = {}) {
       body: JSON.stringify({
         model: MODEL,
         stream: false,
-        keep_alive: '60m',
+        keep_alive: '2m',
         messages: [
           { role: 'system', content: system },
           ...history.slice(-8).map((t) => ({ role: t.role === 'model' ? 'assistant' : 'user', content: t.text })),
