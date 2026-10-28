@@ -106,6 +106,18 @@ async function candidates(now) {
   if (sys.gpu?.temp != null && sys.gpu.temp >= 85) {
     out.push({ key: 'gpu-hot', cooldown: 0.5 * HOUR, text: `Senhor, a placa de vídeo está a ${sys.gpu.temp} graus.` })
   }
+  // Memory nearly full: past this the machine swaps and she is heard
+  // stopping mid-answer. Names the program holding the most.
+  if (sys.mem.total && sys.mem.used / sys.mem.total >= 0.93) {
+    const heaviest = [...(sys.top ?? [])].sort((a, b) => b.mem - a.mem)[0]
+    out.push({
+      key: 'mem-full',
+      cooldown: 2 * HOUR,
+      text:
+        `Senhor, a memória do computador está em ${pct((sys.mem.used / sys.mem.total) * 100)} por cento` +
+        (heaviest ? `; o ${heaviest.name} sozinho ocupa ${(heaviest.mem / 1024 ** 3).toFixed(1).replace('.', ',')} gigas.` : '.'),
+    })
+  }
   for (const d of sys.disks ?? []) {
     if (d.total && d.free / d.total < 0.05) {
       out.push({

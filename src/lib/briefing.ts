@@ -45,6 +45,13 @@ export type Scene = { card: BriefCard | null; line: string }
 
 type Data = { weather: Weather | null; markets: Quote[] | null; stories: Story[] }
 
+/** The parts of the bridge's /today the briefing reads. */
+type Today = {
+  commute: { minutes: number; delay: number; toWork: boolean } | null
+  agenda: { events: { title: string; start: string; allDay: boolean }[] }
+  reminders: { text: string; at: string }[]
+}
+
 const PT = LANG_BASE === 'pt'
 const n = (v: number) => String(Math.round(v))
 /** Money as it is said: two decimals below a thousand, none above. */
@@ -103,8 +110,61 @@ export async function loadScenes(now = new Date()): Promise<Scene[]> {
     })
   }
 
+  // His own day: the drive, what is on the calendar, what he asked to be
+  // reminded of. From the bridge's own sources (the ICS calendar, TomTom, the
+  // reminders), so it needs no model and is there even with no mail connector.
+  const today = await fetch(`${BRIDGE_HTTP_URL}/today`, { signal: AbortSignal.timeout(8000) })
+    .then((r) => (r.ok ? (r.json() as Promise<Today>) : null))
+    .catch(() => null)
+  if (today && PT) {
+    const c = today.commute
+    if (c) {
+      scenes.push({
+        card: null,
+        line:
+          `${c.toWork ? 'Até o trabalho' : 'Até em casa'} são ${c.minutes} minutos agora` +
+          (c.delay >= 5 ? `, ${c.delay} a mais que o normal por causa do trânsito.` : ', trânsito tranquilo.'),
+      })
+    }
+    const end = new Date(now)
+    end.setHours(23, 59, 59, 999)
+    const events = (today.agenda?.events ?? []).filter((e) => {
+      const s = new Date(e.start)
+      return s >= new Date(now.getTime() - 30 * 60_000) && s <= end
+    })
+    const hhmm = (iso: string) => new Date(iso).toLocaleTimeString(LANG, { hour: '2-digit', minute: '2-digit' })
+    if (events.length) {
+      const first = events.find((e) => !e.allDay)
+      scenes.push({
+        card: {
+          kind: 'agenda',
+          id: 'agenda-ics',
+          items: events.slice(0, 5).map((e) => ({ when: e.allDay ? 'dia todo' : hhmm(e.start), title: e.title })),
+        },
+        line:
+          `Na agenda de hoje, ${events.length === 1 ? 'um compromisso' : `${events.length} compromissos`}` +
+          (first ? `; o primeiro às ${hhmm(first.start)}: ${first.title}.` : '.'),
+      })
+    }
+    const reminders = (today.reminders ?? [])
+      .filter((r) => {
+        const at = new Date(r.at)
+        return at > now && at <= end && r.text !== 'Briefing do dia'
+      })
+      .sort((a, b) => a.at.localeCompare(b.at))
+    if (reminders.length) {
+      scenes.push({
+        card: null,
+        line:
+          reminders.length === 1
+            ? `E um lembrete, às ${hhmm(reminders[0].at)}: ${reminders[0].text}.`
+            : `E ${reminders.length} lembretes hoje; o próximo às ${hhmm(reminders[0].at)}: ${reminders[0].text}.`,
+      })
+    }
+  }
+
   if (data.markets?.length) {
-    const by = Object.fromEntries(data.markets.map((q) => [q.name, q]))
+    const by =Object.fromEntries(data.markets.map((q) => [q.name, q]))
     const said: string[] = []
     if (by.USD) {
       said.push(

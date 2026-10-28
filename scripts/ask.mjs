@@ -20,7 +20,7 @@ if (!question) {
   process.exit(1)
 }
 
-const ws = new WebSocket('ws://localhost:8787', { origin: 'http://localhost:5173' })
+const ws = new WebSocket('ws://localhost:8787/?once=1', { origin: 'http://localhost:5173' })
 const timer = setTimeout(() => {
   console.log('(no answer after 150 s)')
   process.exit(2)

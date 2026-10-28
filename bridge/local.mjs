@@ -50,7 +50,15 @@ const ESCALATE = /^\W*(ESCALATE|ESCALAR)\b/i
 const ACTION =
   /^(?:(?:por favor|wednesday|jarvis)[\s,]+)?(?:me\s+)?(?:anot|lembr|marc|agend|toc|coloc|bot|abr|fech|envi|mand|lig|deslig|cri|salv|apag|exclu|paus|pul|aument|abaix|desbloque|bloque|procur|pesquis|busc|abr|mostr|exib|grav|cancel|adi|responde|escrev|compr|pag)\w*\b/i
 
-const LOCAL_PERSONA = `Você é Wednesday, assistente pessoal. Responda em português do Brasil.
+/**
+ * Questions that need live data or her records, whatever their verb: a 3B
+ * model told to escalate them still answered "I have no access to traffic",
+ * and "what did I say about the traffic" with an invention.
+ */
+const NEEDS_DATA =
+  /\b(tr[aâ]nsito|trajeto|rota|de carro|chegar (a|ao|na|no|em)|dist[aâ]ncia|clima|tempo (vai|est[aá]|hoje|amanh)|chuva|chover|temperatura|previs[aã]o|agenda|compromisso|reuni[aã]o|lembrete|not[ií]cia|d[oó]lar|bitcoin|cota[cç][aã]o|e-?mail|m[uú]sica|tocando|falei|disse|conversamos|perguntei|ontem|semana passada|m[eê]s passado|di[aá]rio|anota[cç]|nota|tela|arquivo|pasta)\b/i
+
+const LOCAL_PERSONA =`Você é Wednesday, assistente pessoal. Responda em português do Brasil.
 Trate a pessoa por "senhor". No máximo duas frases curtas. Sem listas, sem emojis.
 Faça contas com cuidado e diga só o resultado.`
 
@@ -77,6 +85,7 @@ export async function localQuick(history, question, opts = {}) {
   // An order is never its to answer, so orders do not reach it: a claim to
   // have done something that was not done is worse than no answer.
   if (!opts.standIn && ACTION.test(question.trim())) return { escalate: true, why: 'needs the agent' }
+  if (!opts.standIn && NEEDS_DATA.test(question)) return { escalate: true, why: 'needs data' }
   // Short on purpose. The long instruction the cloud models get — routing
   // rules, a page of persona — measurably confused a 3B model: with it, "15%
   // of 200" came back "three". A few plain lines and two examples do better.

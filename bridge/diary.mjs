@@ -161,11 +161,66 @@ export function diaryNote() {
   return (
     `\n\nHis diary: one page per day at ${DIARY_DIR.replace(/\\/g, '/')}/AAAA-MM-DD.md, written by you each night. ` +
     'When asked what he did, decided or asked on an earlier day, Read that page before answering. ' +
+    'When asked about a subject rather than a day ("what did I say about the car"), call `search_diary` instead of reading pages one by one. ' +
     'When asked to write today\'s page now, call `write_diary`.'
   )
 }
 
 import { createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk'
+import { z } from 'zod'
+
+/** Lower case, accents gone: "Diário" and "diario" are the same word to him. */
+const fold = (s) =>
+  String(s)
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+
+/**
+ * Every past mention of a subject, across the diary pages and the raw log of
+ * what was said, newest first. Reading a page per day finds "what did I do on
+ * Tuesday"; it cannot find "what did I say about the car last month" without
+ * opening thirty of them, which is slow and spends the turn on file reads.
+ */
+export function searchDiary(query, limit = 12) {
+  const words = fold(query)
+    .split(/[^a-z0-9]+/)
+    .filter((w) => w.length >= 3)
+  if (!words.length) return []
+  const hits = []
+  const consider = (date, source, text) => {
+    const f = fold(text)
+    const score = words.reduce((n, w) => n + (f.includes(w) ? 1 : 0), 0)
+    if (score) hits.push({ date, source, score, text: text.replace(/\s+/g, ' ').trim().slice(0, 300) })
+  }
+  let files = []
+  try {
+    files = readdirSync(DIARY_DIR).filter((f) => /^\d{4}-\d{2}-\d{2}\.md$/.test(f))
+  } catch {
+    /* no diary yet */
+  }
+  for (const f of files) {
+    const date = f.slice(0, 10)
+    // A page is matched paragraph by paragraph, so the answer quotes the
+    // part about the subject and not the whole day.
+    for (const para of readFileSync(join(DIARY_DIR, f), 'utf8').split(/\n\s*\n/)) consider(date, 'diário', para)
+  }
+  let raws = []
+  try {
+    raws = readdirSync(RAW).filter((f) => f.endsWith('.jsonl'))
+  } catch {
+    /* nothing logged yet */
+  }
+  for (const f of raws) {
+    for (const t of readJsonl(join(RAW, f))) {
+      consider(f.slice(0, 10), t.role === 'user' ? 'ele disse' : 'ela disse', t.text ?? '')
+    }
+  }
+  return hits
+    .sort((a, b) => b.score - a.score || b.date.localeCompare(a.date))
+    .slice(0, limit)
+    .sort((a, b) => b.date.localeCompare(a.date))
+}
 
 export function diaryServer() {
   return createSdkMcpServer({
@@ -178,6 +233,19 @@ export function diaryServer() {
         const file = await writeDay(dateKey()).catch(() => null)
         return { content: [{ type: 'text', text: file ? `Written: ${file}` : 'Nothing to write about today yet.' }] }
       }),
+      tool(
+        'search_diary',
+        'Find every past mention of a subject — in the diary pages and in what was said on earlier days — newest first, with dates. ' +
+          'Use for "what did I say about X", "when did I last talk about Y", "o que eu falei sobre o carro".',
+        { query: z.string().describe('The subject, in a few words, e.g. "carro oficina".') },
+        async ({ query }) => {
+          const hits = searchDiary(query)
+          const text = hits.length
+            ? hits.map((h) => `${h.date} (${h.source}): ${h.text}`).join('\n')
+            : `Nothing in the diary about "${query}".`
+          return { content: [{ type: 'text', text }] }
+        },
+      ),
     ],
   })
 }

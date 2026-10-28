@@ -18,6 +18,7 @@ const PT: Record<string, string> = {
   LISTENING: 'OUVINDO',
   THINKING: 'PENSANDO',
   WORKING: 'TRABALHANDO',
+  'reminders held': 'lembretes em espera',
   SPEAKING: 'FALANDO',
   PROCESSING: 'PROCESSANDO',
   'ACCESSING SYSTEMS': 'ACESSANDO SISTEMAS',

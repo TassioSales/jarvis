@@ -44,6 +44,26 @@ async function locate(query) {
   }
 }
 
+const HOME_WORDS = /^\s*(casa|minha casa|em casa|home|my house|aqui|here)\s*$/i
+
+/**
+ * A place, with "casa" (or nothing at all) meaning his home: the exact
+ * coordinates when they are set (JARVIS_LAT/LON), since a neighbourhood's name
+ * sent to a search can come back as the next town; else his home address.
+ */
+async function where(query) {
+  const home = process.env.JARVIS_HOME_ADDRESS?.trim()
+  if (!query?.trim() || HOME_WORDS.test(query) || (home && query.trim() === home)) {
+    const lat = Number(process.env.JARVIS_LAT)
+    const lon = Number(process.env.JARVIS_LON)
+    if (process.env.JARVIS_LAT && Number.isFinite(lat) && Number.isFinite(lon)) {
+      return { lat, lon, label: home || 'casa' }
+    }
+    return home ? locate(home) : null
+  }
+  return locate(query)
+}
+
 const minutes = (s) => Math.round(s / 60)
 
 /**
@@ -52,7 +72,7 @@ const minutes = (s) => Math.round(s / 60)
  */
 export async function routeSummary(from, to) {
   if (!KEY) return null
-  const [a, b] = await Promise.all([locate(from), locate(to)])
+  const [a, b] = await Promise.all([where(from), where(to)])
   if (!a || !b) return null
   const data = await get(`/routing/1/calculateRoute/${a.lat},${a.lon}:${b.lat},${b.lon}/json`, {
     traffic: 'true',
@@ -82,15 +102,16 @@ export function mapsServer() {
         'route',
         'Driving time between two places right now, with live traffic: minutes, ' +
           'distance, and how much of the time is delay. Give each end as an address ' +
-          'or a place name, as specific as you have it (street, neighbourhood, city).',
+          'or a place name, as specific as you have it (street, neighbourhood, city). ' +
+          'Leave `from` out when he does not say where from: it starts at his home. "casa" means his home too.',
         {
-          from: z.string().describe('Where the trip starts.'),
-          to: z.string().describe('Where it ends.'),
+          from: z.string().optional().describe('Where the trip starts. Omit for his home.'),
+          to: z.string().describe('Where it ends ("casa" for his home).'),
         },
         async ({ from, to }) => {
           try {
-            const [a, b] = await Promise.all([locate(from), locate(to)])
-            if (!a) return text(`Could not find "${from}" on the map.`)
+            const [a, b] = await Promise.all([where(from), where(to)])
+            if (!a) return text(from ? `Could not find "${from}" on the map.` : 'His home address is not set.')
             if (!b) return text(`Could not find "${to}" on the map.`)
             const data = await get(
               `/routing/1/calculateRoute/${a.lat},${a.lon}:${b.lat},${b.lon}/json`,

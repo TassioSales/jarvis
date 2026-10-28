@@ -73,7 +73,7 @@ export function pushFeed(text) {
 /** Ask the bridge as the HUD would, and wait for the answer. */
 function ask(text) {
   return new Promise((resolve) => {
-    const ws = new WebSocket(`ws://127.0.0.1:${BRIDGE_PORT}`, { origin: 'http://localhost:5173', headers: { host: `127.0.0.1:${BRIDGE_PORT}` } })
+    const ws = new WebSocket(`ws://127.0.0.1:${BRIDGE_PORT}/?once=1`, { origin: 'http://localhost:5173', headers: { host: `127.0.0.1:${BRIDGE_PORT}` } })
     const timer = setTimeout(() => {
       ws.terminate()
       resolve({ text: 'Receio que a resposta tenha demorado demais, senhor.', brain: null })

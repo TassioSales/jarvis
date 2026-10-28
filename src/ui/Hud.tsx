@@ -64,7 +64,34 @@ function useBridge<T>(path: string, everyMs: number): T | null {
 }
 
 type RailStatus = { services: { id: string; label: string; state: 'ok' | 'warn' | 'down' | 'off'; detail: string }[] }
-type RailSystem = { cpu: { now: number }; mem: { used: number; total: number }; gpu: { util: number | null; temp: number | null } | null }
+type RailSystem = {
+  cpu: { now: number }
+  mem: { used: number; total: number }
+  gpu: { util: number | null; temp: number | null } | null
+  top?: { name: string; mem: number; count: number }[]
+}
+
+/**
+ * Memory nearly full, and what is holding it. At 92% she was swapping, which
+ * is heard as her stopping mid-answer; a lamp that says so, and names the
+ * three programs to close, turns "she is slow" into something he can fix.
+ */
+function MemAlert({ sys }: { sys: RailSystem | null }) {
+  if (!sys) return null
+  const pct = (sys.mem.used / sys.mem.total) * 100
+  if (pct < 90) return null
+  const heavy = [...(sys.top ?? [])].sort((a, b) => b.mem - a.mem).slice(0, 3)
+  return (
+    <div className="mem-alert">
+      <b>{tr('MEMORY')} {Math.round(pct)}%</b>
+      {heavy.map((p) => (
+        <span key={p.name}>
+          {p.name} {(p.mem / 1024 ** 3).toFixed(1)} GB
+        </span>
+      ))}
+    </div>
+  )
+}
 type RailSky = { city: string; now: { temp: number; humidity: number; code: number } }
 type RailToday = {
   reminders: { text: string; at: string }[]
@@ -273,7 +300,20 @@ export function Hud() {
   }, [ui.background])
 
   return (
-    <div className="hud" style={{ ['--accent' as string]: colour }}>
+    <div className={`hud ${focusLeft > 0 ? 'hud-focus' : ''}`} style={{ ['--accent' as string]: colour }}>
+      {/* Focus mode: the room goes dark and the time left is the one thing
+          on the screen, under the reactor. Everything else is still there,
+          dimmed, for when he glances over. */}
+      {focusLeft > 0 && (
+        <div className="focus-big">
+          <b>
+            {String(Math.floor(focusLeft / 60_000)).padStart(2, '0')}
+            <i>:</i>
+            {String(Math.floor((focusLeft % 60_000) / 1000)).padStart(2, '0')}
+          </b>
+          <span>{tr('FOCUS')} · {tr('reminders held')}</span>
+        </div>
+      )}
       {/* First in the tree on purpose. Everything after it is positioned with
           `z-index: auto`, so paint order is document order and the sweep stays
           behind the transcript and the panels without a z-index war. */}
@@ -302,6 +342,7 @@ export function Hud() {
             {String(Math.floor((focusLeft % 60_000) / 1000)).padStart(2, '0')}
           </div>
         )}
+        <MemAlert sys={railSystem} />
         {muted && (
           <button className="mic-off" onClick={() => window.dispatchEvent(new Event('jarvis-unmute'))}>
             {tr('MIC OFF · PRESS M')}

@@ -2511,3 +2511,70 @@ kbd {
     animation: none;
   }
 }
+
+/* Memory nearly full: an amber lamp in the top bar naming what holds it. */
+.mem-alert {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  padding: 4px 10px;
+  border: 1px solid rgb(255 179 71 / 0.55);
+  color: #ffb347;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: none;
+  animation: rail-blink 2.4s ease-in-out infinite;
+}
+.mem-alert b {
+  font-weight: 600;
+  text-transform: uppercase;
+}
+.mem-alert span {
+  opacity: 0.8;
+}
+
+/* Focus mode: the room goes dark, the time left is what remains. */
+.hud-focus .rail,
+.hud-focus .log,
+.hud-focus .suggest,
+.hud-focus .hud-bottom,
+.hud-focus .holo-rings-wrap {
+  opacity: 0.12;
+  transition: opacity 1.2s ease;
+}
+.hud-focus::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: rgb(0 0 0 / 0.55);
+  pointer-events: none;
+}
+.focus-big {
+  position: absolute;
+  left: 50%;
+  top: calc(50% + min(30vmin, 230px));
+  transform: translateX(-50%);
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  z-index: 3;
+}
+.focus-big b {
+  font-weight: 200;
+  font-size: clamp(48px, 9vmin, 110px);
+  letter-spacing: 0.06em;
+  color: #e6fbff;
+  text-shadow: 0 0 30px var(--accent);
+}
+.focus-big b i {
+  font-style: normal;
+  color: var(--accent);
+  animation: rail-blink 2s steps(2) infinite;
+}
+.focus-big span {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 0.4em;
+  opacity: 0.7;
+}

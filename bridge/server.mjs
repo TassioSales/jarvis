@@ -1971,8 +1971,11 @@ setInterval(() => {
   }
 }, 20_000)
 
-wss.on('connection', (socket) => {
+wss.on('connection', (socket, req) => {
   console.log('[jarvis] client connected')
+  // A one-question connection (the phone page, npm run ask) asks at once;
+  // warming it first would only put a throwaway turn in front of the question.
+  const oneShot = /[?&]once=1\b/.test(req?.url ?? '')
 
   // Answer the HUD straight away rather than making it wait for the agent's
   // first turn. Refined later by the real init message.
@@ -2037,10 +2040,11 @@ wss.on('connection', (socket) => {
    * waits for it rather than racing it, exactly as it would behind an
    * interrupt. Set JARVIS_PRIME=0 to go back to a cold first turn.
    */
-  // Off by default once the small model is answering the simple questions:
-  // what reaches Claude then is work with tools in it, which is slow for its
-  // own reasons, and a warm-up on every page load is a turn spent on nothing.
-  let priming = (process.env.JARVIS_PRIME ?? (geminiReady() ? '0' : '1')) !== '0'
+  // On even when the small models answer the simple questions. It was off
+  // then, on the theory that what reaches Claude is slow anyway; measured, the
+  // first Claude question after a restart took ~17 s against ~5 s warm, and
+  // the quick lane never waits on the warm-up, so it costs him nothing.
+  let priming = !oneShot && (process.env.JARVIS_PRIME ?? '1') !== '0'
 
   /**
    * What the two brains need to know about each other.
