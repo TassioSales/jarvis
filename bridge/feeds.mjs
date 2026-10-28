@@ -64,6 +64,14 @@ function cached(ttl, load) {
  */
 const place = cached(PLACE_TTL, async () => {
   const city = process.env.JARVIS_CITY?.trim()
+  // Exact coordinates win over everything. A neighbourhood is not a place a
+  // city search knows, and the address's guess lands on the next town over
+  // (Total Ville, Santa Maria DF came out as Novo Gama, GO).
+  const lat = Number(process.env.JARVIS_LAT)
+  const lon = Number(process.env.JARVIS_LON)
+  if (process.env.JARVIS_LAT && process.env.JARVIS_LON && Number.isFinite(lat) && Number.isFinite(lon)) {
+    return { city: city || 'Casa', region: process.env.JARVIS_REGION?.trim() ?? '', lat, lon }
+  }
   if (city) {
     const found = await getJson(
       'https://geocoding-api.open-meteo.com/v1/search?count=1' +
