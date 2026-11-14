@@ -1,4 +1,4 @@
-# Opens JARVIS across every monitor: the main interface on the primary one and a
+﻿# Opens JARVIS across every monitor: the main interface on the primary one and a
 # satellite on each of the others, each in its own full-screen app window.
 #
 # A browser decides for itself where a new window goes, and "the monitor the
@@ -7,7 +7,7 @@
 # monitor with the Win32 API and only then asks it to go full screen, which a
 # browser does on whichever monitor the window is sitting on.
 #
-# Run by Jarvis.cmd once the servers are up. Safe to run again: it reuses
+# Run by Jarvis.cmd / iniciar_jarvis.bat once the servers are up. Safe to run again: it reuses
 # windows that are already open instead of opening duplicates.
 
 param(
@@ -39,9 +39,23 @@ public static class JarvisWin {
     IntPtr found = IntPtr.Zero;
     EnumWindows((h, l) => {
       if (!IsWindowVisible(h)) return true;
-      var sb = new StringBuilder(256);
-      GetWindowText(h, sb, 256);
-      if (sb.ToString() == title) { found = h; return false; }
+      var sb = new StringBuilder(512);
+      GetWindowText(h, sb, 512);
+      string t = sb.ToString();
+      if (string.IsNullOrWhiteSpace(t)) return true;
+      if (t.Contains("cmd.exe") || t.Contains("powershell") || t.Contains("Visual Studio Code")) return true;
+
+      if (title == "JARVIS") {
+        if ((t == "JARVIS" || t.StartsWith("JARVIS -") || t.StartsWith("JARVIS —") || t.StartsWith("JARVIS –") || t.StartsWith("JARVIS ")) && !t.Contains("·")) {
+          found = h;
+          return false;
+        }
+      } else {
+        if (t == title || t.StartsWith(title + " ") || t.StartsWith(title + " -") || t.StartsWith(title + " —") || t.StartsWith(title + " –")) {
+          found = h;
+          return false;
+        }
+      }
       return true;
     }, IntPtr.Zero);
     return found;
@@ -49,14 +63,15 @@ public static class JarvisWin {
 }
 '@
 
-# Edge first: it is the only browser on Windows with neural Portuguese voices,
-# which matter whenever the ElevenLabs voice is not in use.
+$pf86 = [Environment]::GetEnvironmentVariable('ProgramFiles(x86)')
+$pf64 = [Environment]::GetEnvironmentVariable('ProgramFiles')
 $browser = @(
-  "${env:ProgramFiles(x86)}\Microsoft\Edge\Application\msedge.exe",
-  "$env:ProgramFiles\Microsoft\Edge\Application\msedge.exe",
-  "$env:ProgramFiles\Google\Chrome\Application\chrome.exe",
-  "${env:ProgramFiles(x86)}\Google\Chrome\Application\chrome.exe"
-) | Where-Object { Test-Path $_ } | Select-Object -First 1
+  "$pf86\Microsoft\Edge\Application\msedge.exe",
+  "$pf64\Microsoft\Edge\Application\msedge.exe",
+  "$pf64\Google\Chrome\Application\chrome.exe",
+  "$pf86\Google\Chrome\Application\chrome.exe"
+) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+
 if (-not $browser) { Write-Error 'Neither Edge nor Chrome was found.'; exit 1 }
 
 $screens = [System.Windows.Forms.Screen]::AllScreens
@@ -68,8 +83,6 @@ $others = @($screens | Where-Object { -not $_.Primary } | Sort-Object { $_.Bound
 # each can be switched to another view from its own header.
 $mainPath = if ($Auto) { '/?auto=1' } else { '/' }
 $plan = @(@{ Title = 'JARVIS'; Path = $mainPath; Screen = $primary })
-# The titles carry a middle dot; spelled as a code point so this file stays
-# plain ASCII and reads the same whatever encoding PowerShell assumes.
 $dot = [char]0x00B7
 if (-not $MainOnly) {
   $kinds = @(
@@ -82,8 +95,7 @@ if (-not $MainOnly) {
   }
 }
 
-# Generous: the first load after the servers start has to build the page.
-function Wait-Window([string]$title, [int]$seconds = 45) {
+function Wait-Window([string]$title, [int]$seconds = 15) {
   $deadline = (Get-Date).AddSeconds($seconds)
   while ((Get-Date) -lt $deadline) {
     $h = [JarvisWin]::Find($title)
@@ -107,12 +119,8 @@ foreach ($item in $plan) {
   $b = $item.Screen.Bounds
   $handle = [JarvisWin]::Find($item.Title)
   if ($handle -eq [IntPtr]::Zero) {
-    # The position flags are honoured when this starts the browser and ignored
-    # when it joins one already running; the move below covers both.
     Start-Process -FilePath $browser -ArgumentList @(
       "--app=$Url$($item.Path)",
-      # Lets the page play sound without a click. Only honoured when this
-      # starts the browser, which at login it does; harmless otherwise.
       '--autoplay-policy=no-user-gesture-required',
       "--window-position=$($b.X + 40),$($b.Y + 40)",
       "--window-size=$([Math]::Min(1200, $b.Width - 80)),$([Math]::Min(760, $b.Height - 80))"
@@ -129,10 +137,6 @@ foreach ($item in $plan) {
   [void][JarvisWin]::SetWindowPos($handle, [IntPtr]::Zero, $b.X + 40, $b.Y + 40, $b.Width - 80, $b.Height - 80, 0x0044)
   Start-Sleep -Milliseconds 350
 
-  # F11 goes to whichever window has the keyboard, and Windows refuses to hand
-  # the keyboard to a window on the say-so of a background script. Tapping Alt
-  # first is the documented way to be allowed to; and because a refusal is
-  # silent, check that the window really did fill its monitor and try again.
   for ($try = 0; $try -lt 3 -and -not (Test-Covers $handle $b); $try++) {
     [JarvisWin]::keybd_event(0x12, 0, 0, [UIntPtr]::Zero)
     [JarvisWin]::keybd_event(0x12, 0, 2, [UIntPtr]::Zero)
@@ -146,6 +150,6 @@ foreach ($item in $plan) {
 }
 
 # Leave the keyboard with the main window: that is the one that takes Space,
-# and the one whose INICIAR button has to be clicked.
+# and the one whose INITIALISE button has to be clicked.
 $main = [JarvisWin]::Find('JARVIS')
 if ($main -ne [IntPtr]::Zero) { [void][JarvisWin]::SetForegroundWindow($main) }

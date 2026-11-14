@@ -30,7 +30,7 @@ void HAIL
 const THING = eval(source(app, 'THING'))
 void THING
 const patterns = { WAKE, GREETING }
-for (const name of ['UP_TO_NAME', 'STOP_CMD', 'BARE_STOP', 'LOCK_CMD', 'UNLOCK_CMD', 'ENROL_CMD', 'IDENTIFY_CMD', 'BRIEF_CMD', 'HELP_CMD', 'YES_CMD', 'NO_CMD', 'VOICE_ENROL_CMD', 'VOICE_FORGET_CMD', 'MUTE_CMD', 'FOCUS_CMD', 'FOCUS_END_CMD']) {
+for (const name of ['UP_TO_NAME', 'STOP_CMD', 'BARE_STOP', 'LOCK_CMD', 'UNLOCK_CMD', 'ENROL_CMD', 'IDENTIFY_CMD', 'BRIEF_CMD', 'NIGHT_CMD', 'HELP_CMD', 'YES_CMD', 'NO_CMD', 'VOICE_ENROL_CMD', 'VOICE_FORGET_CMD', 'MUTE_CMD', 'FOCUS_CMD', 'FOCUS_END_CMD']) {
   patterns[name] = eval(source(app, name))
 }
 void NAME
@@ -53,6 +53,7 @@ const cases = {
   ENROL_CMD: { yes: ['cadastrar meu rosto', 'Cadastrar o meu rosto.', 'registrar rosto', 'cadastrar reconhecimento facial'], no: ['cadastrar um cliente', 'meu rosto está cansado'] },
   IDENTIFY_CMD: { yes: ['sou eu', 'confirmar identidade'], no: ['sou eu que mando aqui e quero saber as horas'] },
   BRIEF_CMD: { yes: ['Bom dia', 'bom dia, Jarvis', 'boa tarde', 'briefing', 'resumo do dia'], no: ['bom dia, que horas são?', 'me dá um resumo do e-mail do banco'] },
+  NIGHT_CMD: { yes: ['boa noite', 'boa noite, Jarvis', 'hora de dormir', 'modo noturno', 'descansar'], no: ['boa noite a todos', 'durmo às dez'] },
   HELP_CMD: { yes: ['ajuda', 'comandos', 'o que você sabe fazer?', 'help'], no: ['me ajuda a escrever um e-mail', 'ajuda o cliente'] },
   YES_CMD: { yes: ['sim', 'Sim, pode.', 'confirmo', 'prossiga'], no: ['não', 'talvez', 'espera'] },
   NO_CMD: { yes: ['não', 'Não, cancela.', 'negativo'], no: ['sim', 'pode'] },

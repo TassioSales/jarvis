@@ -25,9 +25,27 @@ echo [3/4] Iniciando Interface 3D na porta 5173...
 start "JARVIS Web" cmd /c "npm run dev"
 
 echo.
-echo [4/4] Aguardando conexao dos subsistemas...
-ping 127.0.0.1 -n 5 > nul
+echo [4/4] Aguardando inicializacao completa das portas 8787 e 5173...
+set /a attempts=0
 
+:check_ports
+set /a attempts+=1
+if %attempts% gtr 30 goto ports_timeout
+ping 127.0.0.1 -n 2 > nul
+
+netstat -an | findstr 127.0.0.1:8787 | findstr LISTENING > nul
+if errorlevel 1 goto check_ports
+
+netstat -an | findstr 127.0.0.1:5173 | findstr LISTENING > nul
+if errorlevel 1 goto check_ports
+
+echo [OK] Subsistemas online e portas ativas!
+goto launch_windows
+
+:ports_timeout
+echo [AVISO] Tempo limite de espera atingido, tentando abrir monitores...
+
+:launch_windows
 echo.
 echo Abrindo JARVIS nos seus 3 monitores...
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\open-windows.ps1"

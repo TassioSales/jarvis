@@ -32,6 +32,7 @@ import {
   INBOX_PROMPT,
   inboxScenes,
   loadScenes,
+  loadNightScenes,
   type Scene as BriefScene,
 } from './lib/briefing'
 import * as kokoro from './lib/kokoro'
@@ -174,7 +175,10 @@ const HELP_CMD =
   /^(?:ajuda|me ajuda|socorro|comandos|quais (?:s[aã]o )?os comandos|o que (?:voc[eê]|o senhor) (?:sabe|pode|consegue) fazer|help|commands|what can you do)[\s.?!]*$/i
 /** A greeting on its own is a request for the day (see briefing.ts). */
 const BRIEF_CMD =
-  /^(?:(?:muito\s+)?bom dia|boa tarde|boa noite|good (?:morning|afternoon|evening)|briefing|resumo(?: do dia)?|como est[aá] o dia)(?:[\s,]+(?:senhor|jarvis|sir))?[\s.!?]*$/i
+  /^(?:(?:muito\s+)?bom dia|boa tarde|good (?:morning|afternoon)|briefing|resumo(?: do dia)?|como est[aá] o dia)(?:[\s,]+(?:senhor|jarvis|sir))?[\s.!?]*$/i
+/** Night routine protocol: bedtime, good night, standby. */
+const NIGHT_CMD =
+  /^(?:boa noite|good night|hora de dormir|modo noturno|descansar|dormir|encerrar o dia)(?:[\s,]+(?:senhor|jarvis|sir))?[\s.!?]*$/i
 /** "It's me" — asking to be let in without naming the monitors. */
 const IDENTIFY_CMD =
   /^(?:sou eu|confirmar?(?:\s+(?:a\s+)?minha)?\s+identidade|me\s+reconhe[cç]a|reconhecimento facial|it'?s me|identify me)[\s.!]*$/i
@@ -709,6 +713,73 @@ export default function App() {
   }
 
   /**
+   * Night Routine Protocol (Stark Industries Standby & Security)
+   */
+  const nightRoutine = async (said: string) => {
+    const mine = ++turn.current
+    const stale = () => mine !== turn.current
+    clearIdle()
+    silence()
+
+    const s = store.getState()
+    s.clearPanels()
+    s.clearBlades()
+    s.setBriefing(null)
+    s.setHelp(false)
+    s.setCaption('')
+    s.pushTurn({ id: newId(), role: 'user', text: said })
+    s.setPhase('thinking')
+
+    let scenes: Awaited<ReturnType<typeof loadNightScenes>> = []
+    try {
+      scenes = await loadNightScenes()
+    } catch (err) {
+      console.warn('[jarvis] night routine unavailable:', err)
+    }
+    if (stale()) return
+    if (!scenes.length) {
+      turn.current--
+      return void respond(said)
+    }
+
+    s.setPhase('speaking')
+    sfx.duck(true)
+    music.duck(true)
+    s.pushTurn({ id: newId(), role: 'jarvis', text: '' })
+
+    const cards: NonNullable<BriefScene['card']>[] = []
+    for (const scene of scenes) {
+      if (scene.card) cards.push(scene.card)
+      store.getState().setBriefing({
+        cards: [...cards],
+        active: scene.card ? cards.length - 1 : -1,
+        caption: scene.line,
+      })
+      store.getState().appendToLastTurn(`${scene.line} `)
+
+      const spk = createSpeaker({ local: true })
+      speaker.current = spk
+      spk.say(scene.line)
+      await Promise.race([
+        spk.end(),
+        new Promise((r) => setTimeout(r, 8000 + scene.line.length * 110)),
+      ])
+      if (stale()) return
+    }
+
+    speaker.current = null
+    sfx.duck(false)
+    music.duck(false)
+    sfx.play('done')
+    const shown = store.getState().briefing
+    if (shown) store.getState().setBriefing({ ...shown, active: -1, caption: '' })
+
+    // If the user answers "sim" or "bloquear", automatically locks monitors
+    offer.current = { ask: 'bloquear', until: Date.now() + 15_000 }
+    listen(FOLLOW_UP_MS)
+  }
+
+  /**
    * Deliver whatever reminders are waiting, if this is a moment he can speak.
    * Locked, he holds them: a reminder is for one person, and the lock means he
    * does not yet know that person is the one in the room.
@@ -884,6 +955,7 @@ export default function App() {
     if (FOCUS_CMD.test(said)) return void startFocus(said)
     if (VOICE_ENROL_CMD.test(said)) return void enrolVoice()
     if (VOICE_FORGET_CMD.test(said)) return void forgetVoice()
+    if (NIGHT_CMD.test(said)) return void nightRoutine(said)
     if (BRIEF_CMD.test(said)) return void brief(said)
     if (HELP_CMD.test(said)) return void showHelp()
     const media = MEDIA_CMDS.find(([re]) => re.test(said.trim()))
@@ -1426,6 +1498,7 @@ export default function App() {
   useEffect(() => {
     if (!import.meta.env.DEV) return
     ;(window as unknown as Record<string, unknown>).__brief = () => void brief('bom dia')
+    ;(window as unknown as Record<string, unknown>).__night = () => void nightRoutine('boa noite')
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 

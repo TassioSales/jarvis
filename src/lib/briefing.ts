@@ -92,7 +92,7 @@ export async function loadScenes(now = new Date()): Promise<Scene[]> {
 
   scenes.push({
     card: { kind: 'overview', id: 'overview', date, parts },
-    line: PT ? `${greeting(now)}, senhor. Hoje é ${date}.` : `${greeting(now)}, sir. It is ${date}.`,
+    line: PT ? `Bom dia, senhor Tássio. Sistemas Stark online. Hoje é ${date}.` : `${greeting(now)}, sir. All systems online. Today is ${date}.`,
   })
 
   if (data.weather) {
@@ -204,6 +204,44 @@ export async function loadScenes(now = new Date()): Promise<Scene[]> {
     line: PT
       ? 'É o que há de relevante, senhor. Quer que eu detalhe algum ponto?'
       : 'That is everything of note, sir. Shall I go into any of it?',
+  })
+
+  return scenes
+}
+
+export async function loadNightScenes(_now = new Date()): Promise<Scene[]> {
+  const res = await fetch(`${BRIDGE_HTTP_URL}/briefing`, { signal: AbortSignal.timeout(10_000) }).catch(() => null)
+  const data = res?.ok ? ((await res.json()) as Data) : null
+
+  const scenes: Scene[] = []
+
+  scenes.push({
+    card: {
+      kind: 'overview',
+      id: 'night-overview',
+      date: 'Protocolo Noturno Stark',
+      parts: ['Modo Standby Ativado', 'DePIN: Grass & DAWN em Execução', 'Sensores: Vigilância Contínua'],
+    },
+    line: PT
+      ? 'Boa noite, senhor Tássio. Protocolo de encerramento noturno Stark ativado.'
+      : 'Good night, sir. Stark night protocol engaged.',
+  })
+
+  if (data?.weather?.tomorrow) {
+    const tm = data.weather.tomorrow
+    scenes.push({
+      card: { kind: 'weather', id: 'weather-night', weather: data.weather },
+      line: PT
+        ? `Para amanhã em ${data.weather.city}, previsão de mínima de ${n(tm.min)} e máxima de ${n(tm.max)} graus, com ${n(tm.rain)} por cento de probabilidade de chuva.`
+        : `Tomorrow's forecast for ${data.weather.city}: low of ${n(tm.min)} and high of ${n(tm.max)} degrees.`,
+    })
+  }
+
+  scenes.push({
+    card: null,
+    line: PT
+      ? 'Todas as instâncias de mineração e tarefas em segundo plano continuam operando normalmente. Deseja que eu bloqueie a estação agora?'
+      : 'All background miners and monitors remain active. Would you like me to lock the workstation now?',
   })
 
   return scenes
