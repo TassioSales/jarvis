@@ -1,5 +1,5 @@
 @echo off
-title JARVIS - Sistema Holografico Stark
+title Stark_Console_Launcher
 color 0B
 
 echo ===================================================================
@@ -18,32 +18,28 @@ for /f "tokens=5" %%a in ('netstat -aon ^| findstr :5173 ^| findstr LISTENING') 
 
 echo.
 echo [2/4] Iniciando Bridge WebSocket na porta 8787...
-start "JARVIS Bridge" cmd /c "node bridge/server.mjs"
+start "JARVIS_Bridge_Node" cmd /c "title JARVIS_Bridge_Node && node bridge/server.mjs"
 
 echo.
 echo [3/4] Iniciando Interface 3D na porta 5173...
-start "JARVIS Web" cmd /c "npm run dev"
+start "JARVIS_Vite_Web" cmd /c "title JARVIS_Vite_Web && npm run dev"
 
 echo.
-echo [4/4] Aguardando inicializacao completa das portas 8787 e 5173...
+echo [4/4] Aguardando portas 8787 e 5173 ficarem ativas...
 set /a attempts=0
 
 :check_ports
 set /a attempts+=1
-if %attempts% gtr 30 goto ports_timeout
+if %attempts% gtr 30 goto launch_windows
 ping 127.0.0.1 -n 2 > nul
 
-netstat -an | findstr 127.0.0.1:8787 | findstr LISTENING > nul
+netstat -aon | findstr :8787 | findstr LISTENING > nul
 if errorlevel 1 goto check_ports
 
-netstat -an | findstr 127.0.0.1:5173 | findstr LISTENING > nul
+netstat -aon | findstr :5173 | findstr LISTENING > nul
 if errorlevel 1 goto check_ports
 
 echo [OK] Subsistemas online e portas ativas!
-goto launch_windows
-
-:ports_timeout
-echo [AVISO] Tempo limite de espera atingido, tentando abrir monitores...
 
 :launch_windows
 echo.

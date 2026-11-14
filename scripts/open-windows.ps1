@@ -1,20 +1,9 @@
 ﻿# Opens JARVIS across every monitor: the main interface on the primary one and a
 # satellite on each of the others, each in its own full-screen app window.
-#
-# A browser decides for itself where a new window goes, and "the monitor the
-# last window was on" is its usual answer - so three windows opened in a row
-# land in a pile. This opens each one, finds it by title, moves it onto its
-# monitor with the Win32 API and only then asks it to go full screen, which a
-# browser does on whichever monitor the window is sitting on.
-#
-# Run by Jarvis.cmd / iniciar_jarvis.bat once the servers are up. Safe to run again: it reuses
-# windows that are already open instead of opening duplicates.
 
 param(
   [string]$Url = 'http://localhost:5173',
-  # Leave the side monitors alone and open only the main window.
   [switch]$MainOnly,
-  # Switch him on without waiting for the click on INICIAR. Used at login.
   [switch]$Auto
 )
 
@@ -34,16 +23,27 @@ public static class JarvisWin {
   [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
   [DllImport("user32.dll")] public static extern void keybd_event(byte vk, byte scan, uint flags, UIntPtr extra);
   [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr hWnd, out RECT r);
+  [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
   [StructLayout(LayoutKind.Sequential)] public struct RECT { public int L, T, R, B; }
+
   public static IntPtr Find(string title) {
     IntPtr found = IntPtr.Zero;
     EnumWindows((h, l) => {
       if (!IsWindowVisible(h)) return true;
+      uint pid;
+      GetWindowThreadProcessId(h, out pid);
+      if (pid == 0) return true;
+      try {
+        string pName = System.Diagnostics.Process.GetProcessById((int)pid).ProcessName.ToLower();
+        if (pName != "msedge" && pName != "chrome") return true;
+      } catch {
+        return true;
+      }
+
       var sb = new StringBuilder(512);
       GetWindowText(h, sb, 512);
       string t = sb.ToString();
       if (string.IsNullOrWhiteSpace(t)) return true;
-      if (t.Contains("cmd.exe") || t.Contains("powershell") || t.Contains("Visual Studio Code")) return true;
 
       if (title == "JARVIS") {
         if ((t == "JARVIS" || t.StartsWith("JARVIS -") || t.StartsWith("JARVIS —") || t.StartsWith("JARVIS –") || t.StartsWith("JARVIS ")) && !t.Contains("·")) {
@@ -78,9 +78,6 @@ $screens = [System.Windows.Forms.Screen]::AllScreens
 $primary = $screens | Where-Object Primary
 $others = @($screens | Where-Object { -not $_.Primary } | Sort-Object { $_.Bounds.X })
 
-# The dashboard goes on the larger of the side monitors when there is a
-# choice. Windows are titled by slot (A, B), not by what they show, because
-# each can be switched to another view from its own header.
 $mainPath = if ($Auto) { '/?auto=1' } else { '/' }
 $plan = @(@{ Title = 'JARVIS'; Path = $mainPath; Screen = $primary })
 $dot = [char]0x00B7
@@ -105,8 +102,6 @@ function Wait-Window([string]$title, [int]$seconds = 15) {
   return [IntPtr]::Zero
 }
 
-# Is the window already covering its monitor? Then it is full screen and
-# pressing F11 again would take it back out.
 function Test-Covers($handle, $bounds) {
   $r = New-Object JarvisWin+RECT
   [void][JarvisWin]::GetWindowRect($handle, [ref]$r)
@@ -133,7 +128,7 @@ foreach ($item in $plan) {
   }
   if (Test-Covers $handle $b) { continue }
 
-  [void][JarvisWin]::ShowWindow($handle, 9)   # restore, in case it was maximised
+  [void][JarvisWin]::ShowWindow($handle, 9)
   [void][JarvisWin]::SetWindowPos($handle, [IntPtr]::Zero, $b.X + 40, $b.Y + 40, $b.Width - 80, $b.Height - 80, 0x0044)
   Start-Sleep -Milliseconds 350
 
@@ -149,7 +144,5 @@ foreach ($item in $plan) {
   }
 }
 
-# Leave the keyboard with the main window: that is the one that takes Space,
-# and the one whose INITIALISE button has to be clicked.
 $main = [JarvisWin]::Find('JARVIS')
 if ($main -ne [IntPtr]::Zero) { [void][JarvisWin]::SetForegroundWindow($main) }
