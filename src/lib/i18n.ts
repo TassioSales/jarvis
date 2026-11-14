@@ -13,7 +13,7 @@ const PT: Record<string, string> = {
   // Status line
   OFFLINE: 'DESLIGADO',
   INITIALISING: 'INICIALIZANDO',
-  'STANDBY — SAY “HEY JARVIS”': 'EM ESPERA — DIGA “WEDNESDAY”',
+  'STANDBY — SAY “HEY JARVIS”': 'EM ESPERA — DIGA “JARVIS”',
   ONLINE: 'ATIVO',
   LISTENING: 'OUVINDO',
   THINKING: 'PENSANDO',
@@ -30,7 +30,7 @@ const PT: Record<string, string> = {
   SIGNAL: 'SINAL',
   YOU: 'VOCÊ',
   say: 'diga',
-  '“hey jarvis”': '“wednesday”',
+  '“hey jarvis”': '“jarvis”',
   'to talk': 'para falar',
   hands: 'mãos',
   face: 'rosto',
@@ -170,18 +170,18 @@ const PT: Record<string, string> = {
   'Nothing on the calendar until tomorrow night.': 'Nada na agenda até amanhã à noite.',
   daily: 'todo dia',
   NOTES: 'NOTAS',
-  'Nothing due. Say: "Wednesday, remind me at six to call João".':
-    'Nada agendado. Diga: "Wednesday, me lembra às seis de ligar pro João".',
+  'Nothing due. Say: "Jarvis, remind me at six to call João".':
+    'Nada agendado. Diga: "Jarvis, me lembra às seis de ligar pro João".',
   'NOW PLAYING': 'TOCANDO AGORA',
   playing: 'tocando',
   paused: 'pausado',
-  'Silence. Say: "Wednesday, play something by Iron Maiden".':
-    'Silêncio. Diga: "Wednesday, toca algo do Iron Maiden".',
+  'Silence. Say: "Jarvis, play something by Iron Maiden".':
+    'Silêncio. Diga: "Jarvis, toca algo do Iron Maiden".',
   LEARNED: 'APRENDIDO',
   habits: 'hábitos',
   facts: 'fatos',
   'She learns your habits and what you tell her about yourself. In a few days, they appear here.':
-    'Ela aprende seus hábitos e o que o senhor conta sobre si. Em alguns dias, aparecem aqui.',
+    'Ele aprende seus hábitos e o que o senhor conta sobre si. Em alguns dias, aparecem aqui.',
   'LEAD STORY': 'DESTAQUE',
   'confirmed by 2+ outlets': 'confirmadas por 2+ veículos',
   'BY SUBJECT': 'POR ASSUNTO',

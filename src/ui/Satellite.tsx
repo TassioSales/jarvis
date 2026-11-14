@@ -37,7 +37,7 @@ export function Satellite({ kind }: { kind: SatelliteKind }) {
   // opening a duplicate next time.
   const slot = new URLSearchParams(location.search).get('slot') ?? (kind === 'telemetry' ? 'A' : 'B')
   useEffect(() => {
-    document.title = `WEDNESDAY · ${slot}`
+    document.title = `J.A.R.V.I.S. · ${slot}`
     return follow(setState)
   }, [slot])
 

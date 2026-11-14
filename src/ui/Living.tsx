@@ -161,7 +161,7 @@ export function HoloCaption() {
   const chips = [...new Set((tools ?? []).map(toolLabel))].slice(0, 4)
   return (
     <div className={`holo-caption ${hers ? 'holo-hers' : 'holo-his'}`}>
-      <span className="holo-who">{hers ? 'WEDNESDAY' : tr('YOU')}</span>
+      <span className="holo-who">{hers ? 'JARVIS' : tr('YOU')}</span>
       <p>
         {/* Keyed by position: a word already shown keeps its node, so only the
             new ones animate in as the sentence grows. */}

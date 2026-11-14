@@ -55,7 +55,7 @@ export function Suggestions() {
           exit={{ opacity: 0, y: -6 }}
           transition={{ duration: 0.35 }}
         >
-          “wednesday, {t(EXAMPLES[i])}”
+          “jarvis, {t(EXAMPLES[i])}”
         </motion.span>
       </AnimatePresence>
     </div>

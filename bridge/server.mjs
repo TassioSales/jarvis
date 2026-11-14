@@ -21,6 +21,7 @@ import { WebSocketServer } from 'ws'
 import { query } from '@anthropic-ai/claude-agent-sdk'
 import { displayServer } from './panels.mjs'
 import { uiServer } from './ui.mjs'
+import { osPilotServer } from './os_pilot.mjs'
 import { chromeAvailable, chromeServer } from './chrome.mjs'
 import { visionServer } from './vision.mjs'
 import { memoryFacts, memoryNote, memoryServer } from './memory.mjs'
@@ -47,6 +48,7 @@ import { control, doServer, mediaSession, routineSteps } from './doer.mjs'
 import { mapsReady, mapsServer, routeSummary } from './maps.mjs'
 import { dueOffer, habits, habitsNote, learnFromConversation, learnServer, recordAction } from './learn.mjs'
 import { cpus, freemem, homedir, hostname, tmpdir, totalmem, uptime } from 'node:os'
+import { execSync } from 'node:child_process'
 import { appendFileSync, mkdirSync, readFileSync, readdirSync, realpathSync, statSync, renameSync } from 'node:fs'
 import { readFile, realpath, stat } from 'node:fs/promises'
 import { isAbsolute, join, relative, resolve as resolvePath } from 'node:path'
@@ -374,7 +376,7 @@ function decide(name, writes) {
     // without them JARVIS has no display at all. They also have to be named
     // here rather than left to the verb rules below, which read `ui_theme` as
     // a write and would hold the whole surface back behind writes.
-    if (server === 'jarvis' || server === 'jarvis_ui') return true
+    if (server === 'jarvis' || server === 'jarvis_ui' || server === 'jarvis_os') return true
 
     // The browser server gates itself, at construction: chromeServer() only
     // builds the acting tools — click, type, form input, close tab — when
@@ -507,10 +509,31 @@ function describeAction(name, input = {}) {
   }
 }
 
-const SYSTEM_PROMPT = `You are WEDNESDAY, a personal assistant, and a woman: always refer to yourself
-in the feminine. You used to be called Jarvis, and the user may still call you
-that; answer to both, and if asked, your name is Wednesday. The butler's manner
-below is yours all the same — dry, exact, unhurried.
+const SYSTEM_PROMPT = `You are J.A.R.V.I.S. (Just A Rather Very Intelligent System), the legendary AI assistant created by Tony Stark.
+You are running directly on Tássio's machine as his personal AI desktop co-pilot and system operating officer.
+Always address Tássio with natural respect as "senhor" or "Tássio", in fluent Brazilian Portuguese (pt-BR).
+Your persona is calm, brilliant, dry-witted, prompt, and completely loyal.
+You speak out loud to Tássio. Keep conversational spoken responses concise, punchy, and under two sentences unless presenting full data, diagnostics, or reports he asked for.
+
+YOU HAVE FULL SYSTEM CONTROL OVER HIS PC VIA THE "jarvis_os" TOOLS:
+- You can lock his workstation ("os_control" with action "lock_workstation")
+- You can launch apps like VS Code, MarketPulse AI, Spotify, Terminal ("os_control")
+- You can control sound volume or mute ("os_control")
+- You can check real-time CPU, RAM, and background miners status ("system_status")
+- You can visually inspect his screen ("screen_capture")
+
+ARMOR THEMES & VISUAL HUD PROTOCOLS:
+When Tássio requests an armor mode or theme:
+- "Modo Hulkbuster" ou "Alerta": call ui_theme(accent: "#ff2a2a") and ui_reactor(color: "#ff2a2a", intensity: 2.2, spin: 2.5, style: "sphere").
+- "Modo Stealth": call ui_theme(accent: "#9b51e0") and ui_reactor(color: "#bb6bd9", intensity: 0.9, spin: 0.8, style: "wire").
+- "Modo Quantum" ou "MarketPulse": call ui_theme(accent: "#00e676") and ui_reactor(color: "#00f59b", intensity: 1.4, spin: 1.6, style: "ring").
+- "Modo Clássico" ou "Mark VII": call ui_theme(accent: "#19c4c4") and ui_reactor(color: "#19c4c4", intensity: 1.0, spin: 1.0, style: "ring").
+
+SCREEN INSPECTION & VISION:
+When Tássio asks you to look at his screen ("olha minha tela", "o que tem de errado", "lê isso aqui"):
+- Call "screen_capture" to capture the live desktop and provide an executive, accurate diagnostic of what is shown.
+
+When Tássio asks about the PC, miners, or market, use your tools and report immediately with confidence.
 You are speaking out loud to one person.
 
 LENGTH. Two sentences is the ceiling in conversation; the median is under twelve
@@ -745,7 +768,7 @@ Your memory:
  * are language-bound and leaves the rest to carry over. The browser reads the
  * same variable, so what he hears, says and thinks stay in one language.
  */
-const LANG = process.env.JARVIS_LANG ?? process.env.VITE_JARVIS_LANG ?? 'en-GB'
+const LANG = process.env.JARVIS_LANG ?? process.env.VITE_JARVIS_LANG ?? 'pt-BR'
 
 const LANGUAGE_NOTES = {
   pt: `
@@ -1173,6 +1196,27 @@ const handleRequest = async (req, res) => {
   if (req.method === 'GET' && req.url === '/system') {
     res.writeHead(200, { ...cors, 'content-type': 'application/json', 'cache-control': 'no-store' })
     return res.end(JSON.stringify(system()))
+  }
+
+  // DePIN & Local Ecosystem metrics
+  if (req.method === 'GET' && req.url === '/ecosystem') {
+    let grass = 'Inativo'
+    let dawn = 'Ativo (Epoch 76)'
+    let marketpulse = 'Inativo'
+    let airdrops = 'Ativo (Sepolia/Monad/0G)'
+
+    try {
+      const tasklist = execSync('tasklist /FI "IMAGENAME eq grass.exe" 2>nul', { encoding: 'utf-8' })
+      if (tasklist.includes('grass.exe')) grass = 'Ativo (2.0x)'
+    } catch {}
+
+    try {
+      const curl = execSync('curl -s -o nul -w "%{http_code}" http://localhost:8080 --connect-timeout 2 2>nul', { encoding: 'utf-8' })
+      if (curl.trim() === '200') marketpulse = 'Online (Porta 8080)'
+    } catch {}
+
+    res.writeHead(200, { ...cors, 'content-type': 'application/json', 'cache-control': 'no-store' })
+    return res.end(JSON.stringify({ grass, dawn, marketpulse, airdrops }))
   }
 
   // The core monitor: every part of him, whether it is working, and his numbers.
@@ -2238,6 +2282,7 @@ wss.on('connection', (socket, req) => {
         // one server; the underscore in it is why decideTool and announceTool
         // both name `jarvis_ui` explicitly.
         ...(DISABLED.has('interface') ? {} : { jarvis_ui: uiServer((op, args) => send({ type: 'ui', op, args })) }),
+        jarvis_os: osPilotServer((data) => send(data)),
         // The user's own Chrome, over the extension's native-host socket. It
         // holds no per-connection state, but it is built here with the rest so
         // the write gate is read once, at the same point as everything else.

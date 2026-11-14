@@ -397,7 +397,7 @@ export function DayView() {
           <Hint>
             {today?.agenda?.configured
               ? t('Nothing on the calendar until tomorrow night.')
-              : t('Nothing due. Say: "Wednesday, remind me at six to call João".')}
+              : t('Nothing due. Say: "Jarvis, remind me at six to call João".')}
           </Hint>
         )}
         {today?.notes.length ? (
@@ -425,7 +425,7 @@ export function DayView() {
             <em>{today.playing.status === 'Playing' ? t('playing') : t('paused')}</em>
           </div>
         ) : (
-          <Hint>{t('Silence. Say: "Wednesday, play something by Iron Maiden".')}</Hint>
+          <Hint>{t('Silence. Say: "Jarvis, play something by Iron Maiden".')}</Hint>
         )}
       </Frame>
 
@@ -626,7 +626,7 @@ export function CoreView({ state }: { state: Snapshot }) {
 
   return (
     <div className="hx-grid hx-core">
-      <Frame className="hx-reactor" code="01" title="WEDNESDAY" aside={status?.model.replace(/^claude-/, '')}>
+      <Frame className="hx-reactor" code="01" title="J.A.R.V.I.S." aside={status?.model.replace(/^claude-/, '')}>
         <div className={`hx-reactor-body hx-phase-${state.phase}`}>
           <div className="hx-orb" aria-hidden>
             <i />
@@ -770,7 +770,7 @@ export function CoreView({ state }: { state: Snapshot }) {
           {state.turns.length === 0 && !state.caption && <p className="hx-dim">{t('nothing said yet')}</p>}
           {state.turns.map((turn) => (
             <p key={turn.id} className={`hx-line hx-line-${turn.role}`}>
-              <b>{turn.role === 'user' ? t('YOU') : 'WEDNESDAY'}</b>
+              <b>{turn.role === 'user' ? t('YOU') : 'JARVIS'}</b>
               {turn.text}
             </p>
           ))}

@@ -107,6 +107,61 @@ body::after {
   opacity: 0.42;
 }
 
+.armor-presets {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+  pointer-events: auto;
+}
+
+.armor-btn {
+  background: rgba(0, 229, 255, 0.08);
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  color: var(--accent);
+  padding: 4px 10px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 0.15em;
+  border-radius: 2px;
+  cursor: pointer;
+  transition: all 200ms ease;
+  user-select: none;
+}
+
+.armor-btn:hover {
+  background: color-mix(in srgb, var(--accent) 25%, transparent);
+  border-color: var(--accent);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--accent) 50%, transparent);
+  transform: translateY(-1px);
+}
+
+.armor-btn-red {
+  border-color: rgba(255, 42, 42, 0.4);
+  color: #ff5252;
+}
+.armor-btn-red:hover {
+  border-color: #ff2a2a;
+  box-shadow: 0 0 12px rgba(255, 42, 42, 0.6);
+}
+
+.armor-btn-purple {
+  border-color: rgba(155, 81, 224, 0.4);
+  color: #bb6bd9;
+}
+.armor-btn-purple:hover {
+  border-color: #9b51e0;
+  box-shadow: 0 0 12px rgba(155, 81, 224, 0.6);
+}
+
+.armor-btn-green {
+  border-color: rgba(0, 230, 118, 0.4);
+  color: #00e676;
+}
+.armor-btn-green:hover {
+  border-color: #00e676;
+  box-shadow: 0 0 12px rgba(0, 230, 118, 0.6);
+}
+
 .status {
   display: flex;
   align-items: center;

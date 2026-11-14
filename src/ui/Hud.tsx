@@ -93,6 +93,12 @@ function MemAlert({ sys }: { sys: RailSystem | null }) {
   )
 }
 type RailSky = { city: string; now: { temp: number; humidity: number; code: number } }
+type RailEcosystem = {
+  grass: string
+  dawn: string
+  marketpulse: string
+  airdrops: string
+}
 type RailToday = {
   reminders: { text: string; at: string }[]
   agenda: { events: { title: string; start: string; allDay: boolean }[] }
@@ -267,6 +273,7 @@ export function Hud() {
   const focusLeft = focusUntil ? Math.max(0, focusUntil - Date.now()) : 0
   const railStatus = useBridge<RailStatus>('/status', 10_000)
   const railSystem = useBridge<RailSystem>('/system', 4000)
+  const railEcosystem = useBridge<RailEcosystem>('/ecosystem', 5000)
   const railSky = useBridge<RailSky>('/weather', 10 * 60_000)
   const railToday = useBridge<RailToday>('/today', 60_000)
   const rings: RingData = {
@@ -330,9 +337,67 @@ export function Hud() {
       <header className="hud-top">
         {ui.chrome.brand && (
           <div className="brand">
-            <span className="brand-mark">WEDNESDAY</span>
-            <span className="brand-sub">{tr('Personal assistant · neural core')}</span>
+            <span className="brand-mark">J.A.R.V.I.S.</span>
+            <span className="brand-sub">Stark Industries · Tactical AI Core</span>
             <BrandClock sky={railSky} />
+            <div className="armor-presets">
+              <button
+                type="button"
+                className="armor-btn"
+                title="Mark VII Clássico (Ciano)"
+                onClick={() => {
+                  useStore.getState().applyUi({
+                    accent: '#19c4c4',
+                    reactor: { color: '#19c4c4', intensity: 1.0, spin: 1.0, style: 'ring' }
+                  })
+                  useStore.getState().fireEffect('pulse')
+                }}
+              >
+                MK-VII
+              </button>
+              <button
+                type="button"
+                className="armor-btn armor-btn-red"
+                title="Modo Hulkbuster / Alerta (Vermelho)"
+                onClick={() => {
+                  useStore.getState().applyUi({
+                    accent: '#ff2a2a',
+                    reactor: { color: '#ff2a2a', intensity: 2.2, spin: 2.5, style: 'sphere' }
+                  })
+                  useStore.getState().fireEffect('flash')
+                }}
+              >
+                HULKBUSTER
+              </button>
+              <button
+                type="button"
+                className="armor-btn armor-btn-purple"
+                title="Modo Stealth (Violeta)"
+                onClick={() => {
+                  useStore.getState().applyUi({
+                    accent: '#9b51e0',
+                    reactor: { color: '#bb6bd9', intensity: 0.9, spin: 0.8, style: 'wire' }
+                  })
+                  useStore.getState().fireEffect('scan')
+                }}
+              >
+                STEALTH
+              </button>
+              <button
+                type="button"
+                className="armor-btn armor-btn-green"
+                title="Modo Quantum (Esmeralda MarketPulse)"
+                onClick={() => {
+                  useStore.getState().applyUi({
+                    accent: '#00e676',
+                    reactor: { color: '#00f59b', intensity: 1.4, spin: 1.6, style: 'ring' }
+                  })
+                  useStore.getState().fireEffect('pulse')
+                }}
+              >
+                QUANTUM
+              </button>
+            </div>
           </div>
         )}
 
@@ -400,6 +465,15 @@ export function Hud() {
             <div className="rail-item mono">{Math.round(railSky.now.temp)}° · {Math.round(railSky.now.humidity)}%</div>
           </>
         )}
+        {railEcosystem && (
+          <>
+            <div className="rail-title rail-gap">ECOSYSTEM</div>
+            <div className="rail-item mono" title="DePIN Grass Mining">GRASS · {railEcosystem.grass}</div>
+            <div className="rail-item mono" title="DePIN DAWN Validator">DAWN · {railEcosystem.dawn}</div>
+            <div className="rail-item mono" title="MarketPulse AI Pro Terminal">PULSE · {railEcosystem.marketpulse}</div>
+            <div className="rail-item mono" title="Autonomous Airdrop Farmer">FARM · {railEcosystem.airdrops}</div>
+          </>
+        )}
       </aside>
 
       <AnimatePresence>
@@ -443,7 +517,7 @@ export function Hud() {
                 exit={{ opacity: 0 }}
                 transition={{ type: 'spring', stiffness: 320, damping: 32 }}
               >
-                <span className="log-who">{t.role === 'user' ? tr('YOU') : 'WEDNESDAY'}</span>
+                <span className="log-who">{t.role === 'user' ? tr('YOU') : 'JARVIS'}</span>
                 {/* Only his half decodes. What the user said was never
                     transmitted from anywhere — dressing it up as machine
                     output would be a lie about where the words came from. */}
