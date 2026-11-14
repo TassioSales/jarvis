@@ -12,15 +12,20 @@ echo.
 
 cd /d "%~dp0"
 
-echo [1/3] Iniciando Bridge WebSocket na porta 8787...
+echo [1/4] Liberando portas 8787 e 5173...
+for /f "tokens=5" %%a in ('netstat -aon ^| findstr :8787 ^| findstr LISTENING') do taskkill /f /pid %%a > nul 2>&1
+for /f "tokens=5" %%a in ('netstat -aon ^| findstr :5173 ^| findstr LISTENING') do taskkill /f /pid %%a > nul 2>&1
+
+echo.
+echo [2/4] Iniciando Bridge WebSocket na porta 8787...
 start "JARVIS Bridge" cmd /c "node bridge/server.mjs"
 
 echo.
-echo [2/3] Iniciando Interface 3D na porta 5173...
+echo [3/4] Iniciando Interface 3D na porta 5173...
 start "JARVIS Web" cmd /c "npm run dev"
 
 echo.
-echo [3/3] Aguardando inicializacao dos servidores...
+echo [4/4] Aguardando conexao dos subsistemas...
 ping 127.0.0.1 -n 5 > nul
 
 echo.
