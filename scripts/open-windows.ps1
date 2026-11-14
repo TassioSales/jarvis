@@ -67,14 +67,14 @@ $others = @($screens | Where-Object { -not $_.Primary } | Sort-Object { $_.Bound
 # choice. Windows are titled by slot (A, B), not by what they show, because
 # each can be switched to another view from its own header.
 $mainPath = if ($Auto) { '/?auto=1' } else { '/' }
-$plan = @(@{ Title = 'WEDNESDAY'; Path = $mainPath; Screen = $primary })
+$plan = @(@{ Title = 'JARVIS'; Path = $mainPath; Screen = $primary })
 # The titles carry a middle dot; spelled as a code point so this file stays
 # plain ASCII and reads the same whatever encoding PowerShell assumes.
 $dot = [char]0x00B7
 if (-not $MainOnly) {
   $kinds = @(
-    @{ Title = "WEDNESDAY $dot A"; Path = '/?sat=telemetry&slot=A' },
-    @{ Title = "WEDNESDAY $dot B"; Path = '/?sat=world&slot=B' }
+    @{ Title = "JARVIS $dot A"; Path = '/?sat=telemetry&slot=A' },
+    @{ Title = "JARVIS $dot B"; Path = '/?sat=world&slot=B' }
   )
   $bySize = @($others | Sort-Object { $_.Bounds.Width * $_.Bounds.Height } -Descending)
   for ($i = 0; $i -lt [Math]::Min($bySize.Count, $kinds.Count); $i++) {
@@ -147,5 +147,5 @@ foreach ($item in $plan) {
 
 # Leave the keyboard with the main window: that is the one that takes Space,
 # and the one whose INICIAR button has to be clicked.
-$main = [JarvisWin]::Find('WEDNESDAY')
+$main = [JarvisWin]::Find('JARVIS')
 if ($main -ne [IntPtr]::Zero) { [void][JarvisWin]::SetForegroundWindow($main) }

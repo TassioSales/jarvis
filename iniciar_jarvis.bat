@@ -29,19 +29,12 @@ echo [4/4] Aguardando conexao dos subsistemas...
 ping 127.0.0.1 -n 5 > nul
 
 echo.
-echo Abrindo JARVIS no navegador...
-
-if exist "C:\Program Files\Google\Chrome\Application\chrome.exe" (
-    start "" "C:\Program Files\Google\Chrome\Application\chrome.exe" --app=http://localhost:5173 --start-maximized
-) else if exist "C:\Program Files (x86)\Google\Chrome\Application\chrome.exe" (
-    start "" "C:\Program Files (x86)\Google\Chrome\Application\chrome.exe" --app=http://localhost:5173 --start-maximized
-) else (
-    start http://localhost:5173
-)
+echo Abrindo JARVIS nos seus 3 monitores...
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\open-windows.ps1"
 
 echo.
 echo ===================================================================
-echo   JARVIS ONLINE. Clique em INITIALISE na tela.
+echo   JARVIS ONLINE EM TODOS OS MONITORES. Clique em INITIALISE na tela.
 echo ===================================================================
 echo.
 pause
