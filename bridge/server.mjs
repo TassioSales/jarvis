@@ -44,7 +44,7 @@ import { recordTrace, traceSummary } from './traces.mjs'
 import { catchUp, DIARY_DIR, diaryNote, diaryServer, diaryTick, logTurn } from './diary.mjs'
 import { ABOUT_HIM, localModel, localQuick, localReady, localReadyNow, warmLocal } from './local.mjs'
 import { mobileInfo, pushFeed, startMobile } from './mobile.mjs'
-import { control, doServer, mediaSession, routineSteps } from './doer.mjs'
+import { control, doServer, mediaSession, routineSteps, open } from './doer.mjs'
 import { mapsReady, mapsServer, routeSummary } from './maps.mjs'
 import { dueOffer, habits, habitsNote, learnFromConversation, learnServer, recordAction } from './learn.mjs'
 import { cpus, freemem, homedir, hostname, tmpdir, totalmem, uptime } from 'node:os'
@@ -1299,6 +1299,39 @@ const handleRequest = async (req, res) => {
     }
     res.writeHead(ok ? 204 : 400, cors)
     return res.end()
+  }
+
+  // Fast-path application launcher (Spotify, VS Code, Calculator, BioPulse, etc.)
+  if (req.method === 'POST' && req.url === '/launch') {
+    const chunks = []
+    for await (const chunk of req) {
+      chunks.push(chunk)
+      if (chunks.length > 4) break
+    }
+    let ok = false
+    try {
+      const { app } = JSON.parse(Buffer.concat(chunks).toString('utf8'))
+      const appMap = {
+        spotify: 'spotify',
+        vscode: 'code',
+        code: 'code',
+        calc: 'calc',
+        calculadora: 'calc',
+        notepad: 'notepad',
+        terminal: 'wt',
+        cmd: 'cmd',
+        chrome: 'chrome',
+        edge: 'msedge',
+        biopulse: 'http://localhost:5050',
+        marketpulse: 'http://localhost:8080',
+      }
+      const target = appMap[String(app).toLowerCase()] || String(app)
+      ok = await open(target)
+    } catch {
+      ok = false
+    }
+    res.writeHead(ok ? 200 : 400, { ...cors, 'content-type': 'application/json' })
+    return res.end(JSON.stringify({ ok }))
   }
 
   // The forecast and the headlines for the side monitors. Cached in feeds.mjs,

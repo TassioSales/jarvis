@@ -170,6 +170,18 @@ const MEDIA_CMDS: [RegExp, string, number][] = [
   [/^(?:mudo|silenciar|muta(?:r)?|tira(?:r)? o som|mute)[\s.!]*$/i, 'mute', 1],
 ]
 
+/** Fast-path application launchers */
+const APP_CMDS: [RegExp, string, string][] = [
+  [/^(?:abre|abrir|iniciar|inicie|coloque|toca|tocar|solta|soltar|bota|botar|roda|rodar)(?: no| o| a)? (?:spotify|m[uú]sica)[\s.!]*$/i, 'spotify', 'Iniciando o Spotify para você, senhor.'],
+  [/^(?:abre|abrir|iniciar|inicie)(?: o)? (?:vs\s*code|vscode|c[oó]digo)[\s.!]*$/i, 'vscode', 'Abrindo o Visual Studio Code, senhor.'],
+  [/^(?:abre|abrir|iniciar|inicie)(?: a)? calculadora[\s.!]*$/i, 'calc', 'Calculadora pronta, senhor.'],
+  [/^(?:abre|abrir|iniciar|inicie)(?: o)? (?:bloco de notas|notepad)[\s.!]*$/i, 'notepad', 'Abrindo o Bloco de Notas, senhor.'],
+  [/^(?:abre|abrir|iniciar|inicie)(?: o)? (?:terminal|powershell|cmd)[\s.!]*$/i, 'terminal', 'Terminal pronto, senhor.'],
+  [/^(?:abre|abrir|iniciar|inicie|status)(?: o)? (?:biopulse|agrovision|ten[eé]brio)[\s.!]*$/i, 'biopulse', 'Abrindo a plataforma BioPulse AI na porta 5050, senhor.'],
+  [/^(?:abre|abrir|iniciar|inicie|status)(?: o)? (?:marketpulse|painel econ[oô]mico)[\s.!]*$/i, 'marketpulse', 'Abrindo o MarketPulse AI na porta 8080, senhor.'],
+  [/^(?:abre|abrir|iniciar|inicie)(?: o)? (?:chrome|navegador|browser|google)[\s.!]*$/i, 'chrome', 'Abrindo o navegador, senhor.'],
+]
+
 /** Asking what he can do, which is answered on screen rather than by the model. */
 const HELP_CMD =
   /^(?:ajuda|me ajuda|socorro|comandos|quais (?:s[aã]o )?os comandos|o que (?:voc[eê]|o senhor) (?:sabe|pode|consegue) fazer|help|commands|what can you do)[\s.?!]*$/i
@@ -840,6 +852,37 @@ export default function App() {
     listen(FOLLOW_UP_MS)
   }
 
+  const launchApp = async (appId: string, announceText: string) => {
+    ++turn.current
+    clearIdle()
+    silence()
+    const s = store.getState()
+    s.setPhase('speaking')
+    s.pushTurn({ id: newId(), role: 'user', text: `Abrir ${appId}` })
+    s.pushTurn({ id: newId(), role: 'jarvis', text: announceText })
+    s.setCaption(announceText)
+
+    const spk = createSpeaker()
+    speaker.current = spk
+    spk.say(announceText)
+
+    try {
+      await fetch(`${BRIDGE_HTTP_URL}/launch`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ app: appId }),
+      })
+      sfx.play('done')
+    } catch (err) {
+      console.warn('[jarvis] app launch failed:', err)
+      sfx.play('error')
+    }
+
+    await Promise.race([spk.end(), new Promise((r) => setTimeout(r, 4000))])
+    speaker.current = null
+    goDormant()
+  }
+
   /** Put the list of things to say on screen, and say that it is there. */
   /**
    * Focus mode: a countdown on the HUD, every reminder, alert and offer held
@@ -963,6 +1006,8 @@ export default function App() {
     if (HELP_CMD.test(said)) return void showHelp()
     const media = MEDIA_CMDS.find(([re]) => re.test(said.trim()))
     if (media) return void pressMedia(media[1], media[2])
+    const appMatch = APP_CMDS.find(([re]) => re.test(said.trim()))
+    if (appMatch) return void launchApp(appMatch[1], appMatch[2])
     if ((UNLOCK_CMD.test(said) || IDENTIFY_CMD.test(said)) && face.enrolled()) {
       return void (async () => {
         ++turn.current

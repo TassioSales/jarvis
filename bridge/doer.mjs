@@ -1,6 +1,6 @@
 import { createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk'
 import { z } from 'zod'
-import { spawn } from 'node:child_process'
+import { spawn, exec } from 'node:child_process'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
@@ -153,7 +153,14 @@ export function safeTarget(target) {
   return null
 }
 
-function open(target) {
+export function open(target) {
+  if (target === 'spotify' || target === 'spotify:') {
+    return new Promise((resolve) => {
+      exec('start spotify: || start "" "%LOCALAPPDATA%\\Microsoft\\WindowsApps\\Spotify.exe"', { windowsHide: true }, (err) => {
+        resolve(!err)
+      })
+    })
+  }
   const safe = safeTarget(target)
   if (!safe) return Promise.resolve(false)
   return new Promise((resolve) => {
