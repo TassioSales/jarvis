@@ -774,9 +774,12 @@ export default function App() {
     const shown = store.getState().briefing
     if (shown) store.getState().setBriefing({ ...shown, active: -1, caption: '' })
 
-    // If the user answers "sim" or "bloquear", automatically locks monitors
-    offer.current = { ask: 'bloquear', until: Date.now() + 15_000 }
-    listen(FOLLOW_UP_MS)
+    // Lock monitors automatically without asking
+    setTimeout(() => {
+      if (!stale() && !store.getState().locked) {
+        void lock()
+      }
+    }, 1500)
   }
 
   /**
@@ -1340,10 +1343,12 @@ export default function App() {
     watchConnection((state) => {
       if (state === 'lost') {
         store.getState().setError(tr('Bridge connection lost — reconnecting.'))
-      } else if (state === 'reconnected') {
-        store
-          .getState()
-          .setError(tr('Bridge reconnected. The previous conversation was not kept.'))
+      } else if (state === 'open' || state === 'reconnected') {
+        // Clear any previous bridge connection error once connected
+        const currentErr = store.getState().error
+        if (currentErr && (currentErr.includes('Cannot reach the bridge') || currentErr.includes('Bridge connection lost') || currentErr.includes('The bridge closed'))) {
+          store.getState().setError(null)
+        }
       }
     })
     const warming = warm().catch((err: Error) => s.setError(err.message))

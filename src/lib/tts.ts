@@ -381,12 +381,38 @@ type Item = {
  *  voice gets to say it. */
 let cloudRestUntil = 0
 
+// Global tracking to ensure ONLY ONE voice can ever speak at any moment
+let globalActiveAudio: HTMLAudioElement | null = null
+
+export function stopAllSpeech() {
+  if (globalActiveAudio) {
+    try {
+      globalActiveAudio.pause()
+      globalActiveAudio.src = ''
+    } catch {
+      /* ignore */
+    }
+    globalActiveAudio = null
+  }
+  if (typeof speechSynthesis !== 'undefined') {
+    try {
+      speechSynthesis.cancel()
+      speechSynthesis.resume()
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
 /**
  * @param opts.local  speak in the system voice even when the cloud one is
  *   available. For long recitals — the briefing, a reminder — where the
  *   cloud voice's monthly allowance goes fastest and matters least.
  */
 export function createSpeaker(opts: { local?: boolean } = {}): Speaker {
+  // Ensure no previous voice continues speaking
+  stopAllSpeech()
+
   const queue: Item[] = []
   let buffer = ''
   let cancelled = false
@@ -394,7 +420,6 @@ export function createSpeaker(opts: { local?: boolean } = {}): Speaker {
   let pumping = false
 
   let currentAudio: HTMLAudioElement | null = null
-  let nativeInFlight = false
   let drained: Array<() => void> = []
 
   const settleDrained = () => {
@@ -522,6 +547,14 @@ export function createSpeaker(opts: { local?: boolean } = {}): Speaker {
 
   const speakNative = (text: string) =>
     new Promise<boolean>((resolve) => {
+      // Ensure any cloud audio is stopped before native synthesis begins
+      if (globalActiveAudio) {
+        try {
+          globalActiveAudio.pause()
+          globalActiveAudio.src = ''
+        } catch {}
+        globalActiveAudio = null
+      }
       // Chrome's speechSynthesis wedges after cancel().
       //
       // This is the single most likely reason a whole session goes silent. The
@@ -570,7 +603,6 @@ export function createSpeaker(opts: { local?: boolean } = {}): Speaker {
       const finish = () => {
         if (done) return
         done = true
-        nativeInFlight = false
         if (watchdog) clearTimeout(watchdog)
         if (keepalive) clearInterval(keepalive)
         cancelAnimationFrame(raf)
@@ -638,14 +670,20 @@ export function createSpeaker(opts: { local?: boolean } = {}): Speaker {
       diag.spoken++
       diag.lastText = text.slice(0, 60)
       diag.voice = u.voice?.name ?? 'default'
-      nativeInFlight = true
       speechSynthesis.speak(u)
     })
 
   const playUrl = (url: string, text: string) =>
     new Promise<void>((resolve) => {
+      // Ensure native synthesis is cancelled before cloud audio starts
+      if (typeof speechSynthesis !== 'undefined') {
+        speechSynthesis.cancel()
+        speechSynthesis.resume()
+      }
+
       const audio = new Audio(url)
       currentAudio = audio
+      globalActiveAudio = audio
       // The generated path is an engine speaking just as much as the OS voice
       // is, so it keeps the same books. `spoken` counts the hand-off, `started`
       // is only incremented once the element reports it is actually playing —
@@ -772,24 +810,9 @@ export function createSpeaker(opts: { local?: boolean } = {}): Speaker {
       cancelled = true
       buffer = ''
       queue.length = 0
-      // Keep the echo tail: the words already in the air still have to be
-      // recognised and discarded, even though he has stopped adding to them.
       setSpeaking('')
-
-      // Only reach for the global cancel if this speaker actually has a native
-      // utterance out — speechSynthesis.cancel() is document-wide and would
-      // otherwise silence an unrelated speaker mid-word.
-      if (nativeInFlight) {
-        nativeInFlight = false
-        speechSynthesis.cancel()
-        // Always pair the cancel with a resume — see the note in speakNative.
-        // Leaving the engine cancelled is what silences every later sentence.
-        speechSynthesis.resume()
-      }
-      if (currentAudio) {
-        currentAudio.pause()
-        currentAudio = null
-      }
+      stopAllSpeech()
+      currentAudio = null
       outLevel = 0
       settleDrained()
     },

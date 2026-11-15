@@ -1,5 +1,6 @@
 @echo off
-title Stark_Console_Launcher
+setlocal enabledelayedexpansion
+title JARVIS_Launcher
 color 0B
 
 echo ===================================================================
@@ -13,42 +14,34 @@ echo.
 cd /d "%~dp0"
 
 echo [1/4] Liberando portas 8787 e 5173...
-for /f "tokens=5" %%a in ('netstat -aon ^| findstr :8787 ^| findstr LISTENING') do taskkill /f /pid %%a > nul 2>&1
-for /f "tokens=5" %%a in ('netstat -aon ^| findstr :5173 ^| findstr LISTENING') do taskkill /f /pid %%a > nul 2>&1
+powershell -NoProfile -Command "Get-NetTCPConnection -LocalPort 8787,5173 -State Listen -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }"
 
 echo.
 echo [2/4] Iniciando Bridge WebSocket na porta 8787...
-start "JARVIS_Bridge_Node" cmd /c "title JARVIS_Bridge_Node && node bridge/server.mjs"
+start "JARVIS_Bridge_Node" /min cmd /c "node bridge/server.mjs"
 
 echo.
 echo [3/4] Iniciando Interface 3D na porta 5173...
-start "JARVIS_Vite_Web" cmd /c "title JARVIS_Vite_Web && npm run dev"
+start "JARVIS_Vite_Web" /min cmd /c "npm run dev"
 
 echo.
-echo [4/4] Aguardando portas 8787 e 5173 ficarem ativas...
-set /a attempts=0
+echo [4/4] Aguardando servidores ficarem prontos...
+powershell -NoProfile -Command "$deadline = (Get-Date).AddSeconds(25); while ((Get-Date) -lt $deadline) { $b = Test-NetConnection -ComputerName 127.0.0.1 -Port 8787 -WarningAction SilentlyContinue; $v = Test-NetConnection -ComputerName 127.0.0.1 -Port 5173 -WarningAction SilentlyContinue; if ($b.TcpTestSucceeded -and $v.TcpTestSucceeded) { exit 0 }; Start-Sleep -Milliseconds 600 }; exit 1"
 
-:check_ports
-set /a attempts+=1
-if %attempts% gtr 30 goto launch_windows
-ping 127.0.0.1 -n 2 > nul
+if errorlevel 1 (
+    echo [AVISO] Tempo limite de espera atingido, tentando abrir monitores assim mesmo...
+) else (
+    echo [OK] Bridge e Interface 3D online e respondendo com sucesso!
+)
 
-netstat -aon | findstr :8787 | findstr LISTENING > nul
-if errorlevel 1 goto check_ports
-
-netstat -aon | findstr :5173 | findstr LISTENING > nul
-if errorlevel 1 goto check_ports
-
-echo [OK] Subsistemas online e portas ativas!
-
-:launch_windows
 echo.
 echo Abrindo JARVIS nos seus 3 monitores...
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\open-windows.ps1"
 
 echo.
 echo ===================================================================
-echo   JARVIS ONLINE EM TODOS OS MONITORES. Clique em INITIALISE na tela.
+echo   JARVIS ONLINE EM TODOS OS 3 MONITORES!
+echo   Clique em INITIALISE no monitor principal e diga: 'Hey Jarvis'
 echo ===================================================================
 echo.
 pause

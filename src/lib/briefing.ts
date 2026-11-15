@@ -202,8 +202,8 @@ export async function loadScenes(now = new Date()): Promise<Scene[]> {
   scenes.push({
     card: null,
     line: PT
-      ? 'É o que há de relevante, senhor. Quer que eu detalhe algum ponto?'
-      : 'That is everything of note, sir. Shall I go into any of it?',
+      ? 'Todos os sistemas e mineradoras Grass e DAWN operando com eficiência máxima, senhor.'
+      : 'All systems and mining nodes operating at peak efficiency, sir.',
   })
 
   return scenes
@@ -223,8 +223,8 @@ export async function loadNightScenes(_now = new Date()): Promise<Scene[]> {
       parts: ['Modo Standby Ativado', 'DePIN: Grass & DAWN em Execução', 'Sensores: Vigilância Contínua'],
     },
     line: PT
-      ? 'Boa noite, senhor Tássio. Protocolo de encerramento noturno Stark ativado.'
-      : 'Good night, sir. Stark night protocol engaged.',
+      ? 'Boa noite, senhor Tássio. Protocolo de encerramento noturno Stark executado.'
+      : 'Good night, sir. Stark night protocol executed.',
   })
 
   if (data?.weather?.tomorrow) {
@@ -237,11 +237,23 @@ export async function loadNightScenes(_now = new Date()): Promise<Scene[]> {
     })
   }
 
+  if (data?.markets?.length) {
+    const by = Object.fromEntries(data.markets.map((q) => [q.name, q]))
+    const said: string[] = []
+    if (by.USD) said.push(`dólar a ${cash(by.USD.last)}`)
+    if (by.EUR) said.push(`euro a ${cash(by.EUR.last)}`)
+    if (by.BTC) said.push(`bitcoin a ${n(by.BTC.last / 1000)} mil`)
+    scenes.push({
+      card: { kind: 'markets', id: 'markets-night', quotes: data.markets },
+      line: PT ? `No fechamento dos mercados: ${said.join(', ')}.` : `Market close: ${said.join(', ')}.`,
+    })
+  }
+
   scenes.push({
     card: null,
     line: PT
-      ? 'Todas as instâncias de mineração e tarefas em segundo plano continuam operando normalmente. Deseja que eu bloqueie a estação agora?'
-      : 'All background miners and monitors remain active. Would you like me to lock the workstation now?',
+      ? 'Mineradoras Grass e DAWN mantidas ativas em segundo plano. Estação em repouso operacional, senhor.'
+      : 'Grass and DAWN nodes active in background. Workstation entering sleep mode, sir.',
   })
 
   return scenes

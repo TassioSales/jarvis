@@ -321,8 +321,8 @@ function connect(): Promise<WebSocket> {
       if (socket === ws) {
         socket = null
         onConnection?.('lost')
-        scheduleReconnect()
       }
+      scheduleReconnect()
     }
   })
 

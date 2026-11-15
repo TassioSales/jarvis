@@ -51,7 +51,8 @@ public static class JarvisWin {
           return false;
         }
       } else {
-        if (t == title || t.StartsWith(title + " ") || t.StartsWith(title + " -") || t.StartsWith(title + " —") || t.StartsWith(title + " –")) {
+        string key = title.Replace("JARVIS ", "");
+        if (t.Contains(key) || t.StartsWith(title)) {
           found = h;
           return false;
         }
@@ -86,9 +87,8 @@ if (-not $MainOnly) {
     @{ Title = "JARVIS $dot A"; Path = '/?sat=telemetry&slot=A' },
     @{ Title = "JARVIS $dot B"; Path = '/?sat=world&slot=B' }
   )
-  $bySize = @($others | Sort-Object { $_.Bounds.Width * $_.Bounds.Height } -Descending)
-  for ($i = 0; $i -lt [Math]::Min($bySize.Count, $kinds.Count); $i++) {
-    $plan += @{ Title = $kinds[$i].Title; Path = $kinds[$i].Path; Screen = $bySize[$i] }
+  for ($i = 0; $i -lt [Math]::Min($others.Count, $kinds.Count); $i++) {
+    $plan += @{ Title = $kinds[$i].Title; Path = $kinds[$i].Path; Screen = $others[$i] }
   }
 }
 
@@ -105,9 +105,8 @@ function Wait-Window([string]$title, [int]$seconds = 15) {
 function Test-Covers($handle, $bounds) {
   $r = New-Object JarvisWin+RECT
   [void][JarvisWin]::GetWindowRect($handle, [ref]$r)
-  return ($r.L -le $bounds.X -and $r.T -le $bounds.Y -and
-          $r.R -ge $bounds.Right -and $r.B -ge $bounds.Bottom -and
-          ($r.R - $r.L) -le ($bounds.Width + 32))
+  return ($r.L -le ($bounds.X + 20) -and $r.T -le ($bounds.Y + 20) -and
+          $r.R -ge ($bounds.Right - 20) -and $r.B -ge ($bounds.Bottom - 20))
 }
 
 foreach ($item in $plan) {
@@ -115,10 +114,11 @@ foreach ($item in $plan) {
   $handle = [JarvisWin]::Find($item.Title)
   if ($handle -eq [IntPtr]::Zero) {
     Start-Process -FilePath $browser -ArgumentList @(
+      '--new-window',
       "--app=$Url$($item.Path)",
       '--autoplay-policy=no-user-gesture-required',
-      "--window-position=$($b.X + 40),$($b.Y + 40)",
-      "--window-size=$([Math]::Min(1200, $b.Width - 80)),$([Math]::Min(760, $b.Height - 80))"
+      "--window-position=$($b.X + 30),$($b.Y + 30)",
+      "--window-size=$([Math]::Min(1200, $b.Width - 60)),$([Math]::Min(760, $b.Height - 60))"
     )
     $handle = Wait-Window $item.Title
   }
@@ -129,18 +129,19 @@ foreach ($item in $plan) {
   if (Test-Covers $handle $b) { continue }
 
   [void][JarvisWin]::ShowWindow($handle, 9)
-  [void][JarvisWin]::SetWindowPos($handle, [IntPtr]::Zero, $b.X + 40, $b.Y + 40, $b.Width - 80, $b.Height - 80, 0x0044)
-  Start-Sleep -Milliseconds 350
+  [void][JarvisWin]::SetWindowPos($handle, [IntPtr]::Zero, $b.X, $b.Y, $b.Width, $b.Height, 0x0040)
+  Start-Sleep -Milliseconds 250
+  [void][JarvisWin]::ShowWindow($handle, 3)
+  Start-Sleep -Milliseconds 250
 
-  for ($try = 0; $try -lt 3 -and -not (Test-Covers $handle $b); $try++) {
+  if (-not (Test-Covers $handle $b)) {
     [JarvisWin]::keybd_event(0x12, 0, 0, [UIntPtr]::Zero)
     [JarvisWin]::keybd_event(0x12, 0, 2, [UIntPtr]::Zero)
     [void][JarvisWin]::SetForegroundWindow($handle)
-    Start-Sleep -Milliseconds 300
+    Start-Sleep -Milliseconds 250
     if ([JarvisWin]::GetForegroundWindow() -eq $handle) {
       [System.Windows.Forms.SendKeys]::SendWait('{F11}')
     }
-    Start-Sleep -Milliseconds 700
   }
 }
 
