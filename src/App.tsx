@@ -691,7 +691,7 @@ export default function App() {
       })
       store.getState().appendToLastTurn(`${scene.line} `)
 
-      const spk = createSpeaker({ local: true })
+      const spk = createSpeaker()
       speaker.current = spk
       spk.say(scene.line)
       // A voice engine that never reports the end of a sentence must not
@@ -757,7 +757,7 @@ export default function App() {
       })
       store.getState().appendToLastTurn(`${scene.line} `)
 
-      const spk = createSpeaker({ local: true })
+      const spk = createSpeaker()
       speaker.current = spk
       spk.say(scene.line)
       await Promise.race([

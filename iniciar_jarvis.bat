@@ -26,7 +26,7 @@ start "JARVIS_Vite_Web" /min cmd /c "npm run dev"
 
 echo.
 echo [4/4] Aguardando servidores ficarem prontos...
-powershell -NoProfile -Command "$deadline = (Get-Date).AddSeconds(25); while ((Get-Date) -lt $deadline) { $b = Test-NetConnection -ComputerName 127.0.0.1 -Port 8787 -WarningAction SilentlyContinue; $v = Test-NetConnection -ComputerName 127.0.0.1 -Port 5173 -WarningAction SilentlyContinue; if ($b.TcpTestSucceeded -and $v.TcpTestSucceeded) { exit 0 }; Start-Sleep -Milliseconds 600 }; exit 1"
+powershell -NoProfile -Command "$deadline = (Get-Date).AddSeconds(20); while ((Get-Date) -lt $deadline) { $b = [bool](Get-NetTCPConnection -LocalPort 8787 -State Listen -ErrorAction SilentlyContinue); $v = [bool](Get-NetTCPConnection -LocalPort 5173 -State Listen -ErrorAction SilentlyContinue); if ($b -and $v) { exit 0 }; Start-Sleep -Milliseconds 400 }; exit 1"
 
 if errorlevel 1 (
     echo [AVISO] Tempo limite de espera atingido, tentando abrir monitores assim mesmo...

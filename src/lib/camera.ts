@@ -86,9 +86,64 @@ export async function holdCamera(): Promise<HTMLVideoElement> {
 
 let opening: Promise<HTMLVideoElement> | null = null
 
+const CAMERA_STORE_KEY = 'jarvis.camera.id'
+
+export async function listCameras(): Promise<MediaDeviceInfo[]> {
+  try {
+    const devices = await navigator.mediaDevices.enumerateDevices()
+    return devices.filter((d) => d.kind === 'videoinput')
+  } catch {
+    return []
+  }
+}
+
+export function setPreferredCamera(deviceId: string) {
+  if (deviceId) {
+    localStorage.setItem(CAMERA_STORE_KEY, deviceId)
+  } else {
+    localStorage.removeItem(CAMERA_STORE_KEY)
+  }
+}
+
+export function getPreferredCamera(): string | null {
+  return localStorage.getItem(CAMERA_STORE_KEY)
+}
+
+async function resolveVideoConstraints(): Promise<MediaTrackConstraints> {
+  const base = { width: 1280, height: 720 }
+  const preferred = getPreferredCamera()
+  if (preferred) {
+    return { ...base, deviceId: { ideal: preferred } }
+  }
+
+  try {
+    const cameras = await listCameras()
+    if (cameras.length > 1) {
+      // Prioritize built-in laptop / notebook cameras over phone / virtual apps
+      const isVirtualOrPhone = (label: string) => /droidcam|iriun|epoccam|obs|virtual|phone|vcam/i.test(label)
+      const isInternal = (label: string) => /integrated|internal|builtin|built-in|laptop|notebook|facetime|front|hd webcam|hd camera/i.test(label)
+
+      const internalCam = cameras.find((c) => isInternal(c.label) && !isVirtualOrPhone(c.label))
+      if (internalCam && internalCam.deviceId) {
+        return { ...base, deviceId: { ideal: internalCam.deviceId } }
+      }
+
+      const nonPhoneCam = cameras.find((c) => !isVirtualOrPhone(c.label))
+      if (nonPhoneCam && nonPhoneCam.deviceId) {
+        return { ...base, deviceId: { ideal: nonPhoneCam.deviceId } }
+      }
+    }
+  } catch {
+    // fallback to generic facingMode
+  }
+
+  return { ...base, facingMode: 'user' }
+}
+
 async function openCamera(): Promise<HTMLVideoElement> {
+  const constraints = await resolveVideoConstraints()
   const s = await navigator.mediaDevices.getUserMedia({
-    video: { width: 1280, height: 720, facingMode: 'user' },
+    video: constraints,
   })
   try {
     const el = document.createElement('video')
