@@ -17,13 +17,16 @@
 }
 
 .brief-card {
-  border: 1px solid color-mix(in srgb, var(--interface) 55%, transparent);
-  background: color-mix(in srgb, var(--interface) 9%, rgb(2 10 18 / 0.86));
-  backdrop-filter: blur(10px);
+  border-radius: 20px;
+  border: 1.5px solid color-mix(in srgb, var(--interface) 65%, transparent);
+  background: color-mix(in srgb, var(--interface) 11%, rgb(3 11 22 / 0.88));
+  backdrop-filter: blur(16px);
   box-shadow:
-    0 0 40px color-mix(in srgb, var(--interface) 22%, transparent),
-    inset 0 0 24px color-mix(in srgb, var(--interface) 8%, transparent);
+    0 20px 50px rgba(0, 0, 0, 0.75),
+    0 0 36px color-mix(in srgb, var(--interface) 28%, transparent),
+    inset 0 1px 2px rgba(255, 255, 255, 0.25);
   color: var(--ink);
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s ease;
 }
 
 .brief-main {
@@ -58,12 +61,16 @@
   margin-top: clamp(12px, 2vmin, 22px);
 }
 .brief-chips span {
-  padding: 5px 12px;
-  border: 1px solid color-mix(in srgb, var(--interface) 40%, transparent);
+  padding: 6px 14px;
+  border-radius: 9999px;
+  border: 1.5px solid color-mix(in srgb, var(--interface) 50%, transparent);
+  background: color-mix(in srgb, var(--interface) 12%, transparent);
   font-family: 'JetBrains Mono', monospace;
   font-size: clamp(9px, 1.15vmin, 12px);
-  letter-spacing: 0.2em;
-  color: var(--ink-2);
+  font-weight: 600;
+  letter-spacing: 0.15em;
+  color: var(--ink);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
 }
 
 .brief-row {
@@ -177,7 +184,10 @@
   max-height: 17vh;
   overflow: hidden;
   padding: clamp(8px, 1.1vmin, 13px);
-  opacity: 0.86;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--interface) 45%, transparent);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55), inset 0 1px 1px rgba(255, 255, 255, 0.15);
+  opacity: 0.88;
   animation: brief-shelve 0.45s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 .brief-mini .brief-kicker {
@@ -246,8 +256,16 @@
 .brief-caption {
   max-width: min(900px, 80vw);
   margin: 0;
-  font-size: clamp(15px, 2.3vmin, 26px);
-  font-weight: 600;
+  padding: clamp(8px, 1.2vmin, 14px) clamp(18px, 2.8vmin, 32px);
+  background: rgba(3, 11, 20, 0.82);
+  border: 1.5px solid color-mix(in srgb, var(--interface) 40%, transparent);
+  border-radius: 9999px;
+  backdrop-filter: blur(16px);
+  box-shadow:
+    0 12px 32px rgba(0, 0, 0, 0.7),
+    0 0 20px color-mix(in srgb, var(--interface) 20%, transparent);
+  font-size: clamp(14px, 2vmin, 22px);
+  font-weight: 500;
   line-height: 1.35;
   text-align: center;
   text-wrap: balance;

@@ -187,16 +187,18 @@ export async function loadScenes(now = new Date()): Promise<Scene[]> {
     })
   }
 
-  for (const story of data.stories) {
-    // A headline that already ends in punctuation would otherwise be read
-    // with a doubled stop, which the voice renders as an awkward pause.
-    const title = story.title.replace(/[.!?…\s]+$/, '')
-    scenes.push({
-      card: { kind: 'news', id: `news-${story.topic}`, story },
-      line: PT
-        ? `Em ${story.topic}: ${title}. A informação é do ${story.source}.`
-        : `In ${story.topic}: ${title}. That is from ${story.source}.`,
-    })
+  if (data.stories?.length) {
+    for (const story of data.stories.slice(0, 3)) {
+      // A headline that already ends in punctuation would otherwise be read
+      // with a doubled stop, which the voice renders as an awkward pause.
+      const title = story.title.replace(/[.!?…\s]+$/, '')
+      scenes.push({
+        card: { kind: 'news', id: `news-${story.topic}`, story },
+        line: PT
+          ? `Em notícias de ${story.topic}: ${title}. Informações do ${story.source}.`
+          : `In ${story.topic}: ${title}. That is from ${story.source}.`,
+      })
+    }
   }
 
   scenes.push({
@@ -247,6 +249,18 @@ export async function loadNightScenes(_now = new Date()): Promise<Scene[]> {
       card: { kind: 'markets', id: 'markets-night', quotes: data.markets },
       line: PT ? `No fechamento dos mercados: ${said.join(', ')}.` : `Market close: ${said.join(', ')}.`,
     })
+  }
+
+  if (data?.stories?.length) {
+    for (const story of data.stories.slice(0, 3)) {
+      const title = story.title.replace(/[.!?…\s]+$/, '')
+      scenes.push({
+        card: { kind: 'news', id: `night-news-${story.topic}`, story },
+        line: PT
+          ? `No resumo de notícias: em ${story.topic}, ${title}. Divulgado pelo ${story.source}.`
+          : `In the evening news: in ${story.topic}, ${title}. Reported by ${story.source}.`,
+      })
+    }
   }
 
   scenes.push({

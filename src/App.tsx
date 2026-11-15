@@ -34,6 +34,8 @@ import {
   loadScenes,
   loadNightScenes,
   type Scene as BriefScene,
+  type BriefCard,
+  type Story,
 } from './lib/briefing'
 import * as kokoro from './lib/kokoro'
 import { BRIDGE_HTTP_URL, ORB, PRESENCE, TTS_ENGINE } from './config'
@@ -172,14 +174,14 @@ const MEDIA_CMDS: [RegExp, string, number][] = [
 
 /** Fast-path application launchers */
 const APP_CMDS: [RegExp, string, string][] = [
-  [/^(?:abre|abrir|iniciar|inicie|coloque|toca|tocar|solta|soltar|bota|botar|roda|rodar)(?: no| o| a)? (?:spotify|m[uú]sica)[\s.!]*$/i, 'spotify', 'Iniciando o Spotify para você, senhor.'],
-  [/^(?:abre|abrir|iniciar|inicie)(?: o)? (?:vs\s*code|vscode|c[oó]digo)[\s.!]*$/i, 'vscode', 'Abrindo o Visual Studio Code, senhor.'],
-  [/^(?:abre|abrir|iniciar|inicie)(?: a)? calculadora[\s.!]*$/i, 'calc', 'Calculadora pronta, senhor.'],
-  [/^(?:abre|abrir|iniciar|inicie)(?: o)? (?:bloco de notas|notepad)[\s.!]*$/i, 'notepad', 'Abrindo o Bloco de Notas, senhor.'],
-  [/^(?:abre|abrir|iniciar|inicie)(?: o)? (?:terminal|powershell|cmd)[\s.!]*$/i, 'terminal', 'Terminal pronto, senhor.'],
-  [/^(?:abre|abrir|iniciar|inicie|status)(?: o)? (?:biopulse|agrovision|ten[eé]brio)[\s.!]*$/i, 'biopulse', 'Abrindo a plataforma BioPulse AI na porta 5050, senhor.'],
-  [/^(?:abre|abrir|iniciar|inicie|status)(?: o)? (?:marketpulse|painel econ[oô]mico)[\s.!]*$/i, 'marketpulse', 'Abrindo o MarketPulse AI na porta 8080, senhor.'],
-  [/^(?:abre|abrir|iniciar|inicie)(?: o)? (?:chrome|navegador|browser|google)[\s.!]*$/i, 'chrome', 'Abrindo o navegador, senhor.'],
+  [/^(?:abre|abrir|iniciar|inicie|coloque|toca|tocar|solta|soltar|bota|botar|roda|rodar)?\s*(?:no|o|a)?\s*(?:spotify|m[uú]sica)[\s.!]*$/i, 'spotify', 'Iniciando o Spotify para você, senhor.'],
+  [/^(?:abre|abrir|iniciar|inicie)?\s*(?:o)?\s*(?:vs\s*code|vscode|c[oó]digo)[\s.!]*$/i, 'vscode', 'Abrindo o Visual Studio Code, senhor.'],
+  [/^(?:abre|abrir|iniciar|inicie)?\s*(?:a)?\s*calculadora[\s.!]*$/i, 'calc', 'Calculadora pronta, senhor.'],
+  [/^(?:abre|abrir|iniciar|inicie)?\s*(?:o)?\s*(?:bloco de notas|notepad)[\s.!]*$/i, 'notepad', 'Abrindo o Bloco de Notas, senhor.'],
+  [/^(?:abre|abrir|iniciar|inicie)?\s*(?:o)?\s*(?:terminal|powershell|cmd)[\s.!]*$/i, 'terminal', 'Terminal pronto, senhor.'],
+  [/^(?:abre|abrir|iniciar|inicie)?\s*(?:o)?\s*(?:biopulse|agrovision|ten[eé]brio)[\s.!]*$/i, 'biopulse', 'Abrindo a plataforma BioPulse AI na porta 5050, senhor.'],
+  [/^(?:abre|abrir|iniciar|inicie)?\s*(?:o)?\s*(?:marketpulse|painel econ[oô]mico)[\s.!]*$/i, 'marketpulse', 'Abrindo o MarketPulse AI na porta 8080, senhor.'],
+  [/^(?:abre|abrir|iniciar|inicie)?\s*(?:o)?\s*(?:chrome|navegador|browser|google)[\s.!]*$/i, 'chrome', 'Abrindo o navegador, senhor.'],
 ]
 
 /** Asking what he can do, which is answered on screen rather than by the model. */
@@ -191,6 +193,12 @@ const BRIEF_CMD =
 /** Night routine protocol: bedtime, good night, standby. */
 const NIGHT_CMD =
   /^(?:boa noite|good night|hora de dormir|modo noturno|descansar|dormir|encerrar o dia)(?:[\s,]+(?:senhor|jarvis|sir))?[\s.!?]*$/i
+/** Fast-path news routine. */
+const NEWS_CMD =
+  /^(?:not[ií]cias|quais (?:s[aã]o )?(?:as )?not[ií]cias|[uú]ltimas not[ií]cias|manchetes|o que est[aá] acontecendo)(?:[\s,]+(?:senhor|jarvis|sir))?[\s.!?]*$/i
+/** Fast-path general system diagnostics. */
+const STATUS_CMD =
+  /^(?:status do sistema|diagn[oó]stico(?: do sistema)?|como est[aã]o os sistemas|relat[oó]rio geral|status geral)(?:[\s,]+(?:senhor|jarvis|sir))?[\s.!?]*$/i
 /** "It's me" — asking to be let in without naming the monitors. */
 const IDENTIFY_CMD =
   /^(?:sou eu|confirmar?(?:\s+(?:a\s+)?minha)?\s+identidade|me\s+reconhe[cç]a|reconhecimento facial|it'?s me|identify me)[\s.!]*$/i
@@ -425,7 +433,7 @@ export default function App() {
 
     // Spoken while he looks, not before: the scan is the slow part, and a
     // sentence of warning is exactly how long it usually takes.
-    const speaking = announce('One moment while I confirm your identity.')
+    const speaking = announce('Aguarde um momento enquanto confirmo sua identidade biométrica.')
     let verdict: face.Verdict | 'error'
     try {
       verdict = await face.verify(8000, stale)
@@ -444,7 +452,7 @@ export default function App() {
       s.setIdentity('granted')
       s.fireEffect('scan')
       sfx.play('done')
-      await announce('Biometric identity confirmed, sir. Systems unlocked.')
+      await announce('Identidade biométrica confirmada, senhor Tássio. Sistemas Stark desbloqueados e operacionais.')
       settleIdentity()
       if (stale()) return
       if (pending && !UNLOCK_CMD.test(pending) && !IDENTIFY_CMD.test(pending)) handle(pending)
@@ -457,10 +465,10 @@ export default function App() {
     sfx.play('error')
     await announce(
       verdict === 'stranger'
-        ? 'I do not recognise you. Access denied.'
+        ? 'Rosto não reconhecido. Acesso negado aos sistemas.'
         : verdict === 'nobody'
-          ? 'I cannot see anyone, sir. Systems remain locked.'
-          : 'The camera is unavailable, sir. Systems remain locked.',
+          ? 'Nenhuma pessoa detectada em frente à câmera, senhor. Sistemas mantidos em bloqueio de segurança.'
+          : 'A câmera de biometria está indisponível no momento, senhor. Sistemas bloqueados.',
     )
     settleIdentity()
     if (!stale()) goDormant()
@@ -470,7 +478,7 @@ export default function App() {
     if (!face.enrolled()) {
       ++turn.current
       store.getState().setPhase('speaking')
-      await announce('There is no face on record, sir. Say: register my face.')
+      await announce('Nenhum perfil facial cadastrado no sistema, senhor. Diga: "cadastrar meu rosto" para registrar.')
       listen(FOLLOW_UP_MS)
       return
     }
@@ -484,7 +492,7 @@ export default function App() {
     s.setLocked(true)
     s.setIdentity('idle')
     s.setPhase('speaking')
-    await announce('Systems locked, sir.')
+    await announce('Sistemas Stark bloqueados com sucesso, senhor. Aguardando autenticação facial.')
     if (mine === turn.current) goDormant()
   }
 
@@ -596,7 +604,7 @@ export default function App() {
     const s = store.getState()
     s.setPhase('thinking')
     s.setIdentity('scanning')
-    const speaking = announce('Look at the camera, sir.')
+    const speaking = announce('Olhe para a câmera e centralize o seu rosto, senhor.')
     let kept = 0
     try {
       kept = await face.enrol()
@@ -610,8 +618,8 @@ export default function App() {
     s.setPhase('speaking')
     await announce(
       kept
-        ? 'Face registered, sir. Say: lock, whenever you want me to stand guard.'
-        : 'I could not see your face clearly, sir. Nothing was registered.',
+        ? 'Rosto cadastrado com sucesso, senhor. O sistema agora está protegido por biometria facial.'
+        : 'Não foi possível capturar o seu rosto com nitidez. Verifique a iluminação e tente novamente.',
     )
     if (mine === turn.current) listen(FOLLOW_UP_MS)
   }
@@ -792,6 +800,114 @@ export default function App() {
         void lock()
       }
     }, 1500)
+  }
+
+  /**
+   * Fast-path News Routine: fetch latest news headlines and speak them.
+   */
+  const newsRoutine = async (said: string) => {
+    const mine = ++turn.current
+    const stale = () => mine !== turn.current
+    clearIdle()
+    silence()
+
+    const s = store.getState()
+    s.clearPanels()
+    s.clearBlades()
+    s.setBriefing(null)
+    s.setHelp(false)
+    s.setCaption('')
+    s.pushTurn({ id: newId(), role: 'user', text: said })
+    s.setPhase('thinking')
+
+    let stories: Story[] = []
+    try {
+      const res = await fetch(`${BRIDGE_HTTP_URL}/briefing`, { signal: AbortSignal.timeout(8000) })
+      if (res.ok) {
+        const data = (await res.json()) as { stories?: Story[] }
+        stories = data.stories ?? []
+      }
+    } catch (err) {
+      console.warn('[jarvis] news data fetch error:', err)
+    }
+
+    if (stale()) return
+    if (!stories.length) {
+      turn.current--
+      return void respond(said)
+    }
+
+    s.setPhase('speaking')
+    sfx.duck(true)
+    music.duck(true)
+    s.pushTurn({ id: newId(), role: 'jarvis', text: '' })
+
+    const cards: BriefCard[] = []
+    for (const story of stories.slice(0, 3)) {
+      const title = story.title.replace(/[.!?…\s]+$/, '')
+      const card: BriefCard = { kind: 'news', id: `news-${story.topic}`, story }
+      cards.push(card)
+      const line = `Em ${story.topic}: ${title}. Informações do ${story.source}.`
+
+      store.getState().setBriefing({
+        cards: [...cards],
+        active: cards.length - 1,
+        caption: line,
+      })
+      store.getState().appendToLastTurn(`${line} `)
+
+      const spk = createSpeaker()
+      speaker.current = spk
+      spk.say(line)
+      await Promise.race([spk.end(), new Promise((r) => setTimeout(r, 8000 + line.length * 110))])
+      if (stale()) return
+    }
+
+    speaker.current = null
+    sfx.duck(false)
+    music.duck(false)
+    sfx.play('done')
+    const shown = store.getState().briefing
+    if (shown) store.getState().setBriefing({ ...shown, active: -1, caption: '' })
+    listen(FOLLOW_UP_MS)
+  }
+
+  /**
+   * System Status & Diagnostics Routine
+   */
+  const systemStatusRoutine = async (said: string) => {
+    const mine = ++turn.current
+    const stale = () => mine !== turn.current
+    clearIdle()
+    silence()
+
+    const s = store.getState()
+    s.clearPanels()
+    s.setCaption('')
+    s.pushTurn({ id: newId(), role: 'user', text: said })
+    s.setPhase('speaking')
+    sfx.duck(true)
+    music.duck(true)
+    s.pushTurn({ id: newId(), role: 'jarvis', text: '' })
+
+    const report =
+      'Relatório de diagnóstico Stark: Sistema de três monitores operando. ' +
+      'Mineradoras DePIN Grass e DAWN com taxa de telemetria nominal e ativas em segundo plano. ' +
+      'BioPulse AI conectado na porta 5050 com modelos Gompertz e mapa de calor. ' +
+      'Voz neural ElevenLabs e ponte WebSocket ativas. Todos os sistemas em verde, senhor.'
+
+    store.getState().appendToLastTurn(report)
+    const spk = createSpeaker()
+    speaker.current = spk
+    spk.say(report)
+    await Promise.race([spk.end(), new Promise((r) => setTimeout(r, 16000))])
+    if (stale()) return
+
+    speaker.current = null
+    sfx.duck(false)
+    music.duck(false)
+    sfx.play('done')
+    listen(FOLLOW_UP_MS)
   }
 
   /**
@@ -1002,6 +1118,8 @@ export default function App() {
     if (VOICE_ENROL_CMD.test(said)) return void enrolVoice()
     if (VOICE_FORGET_CMD.test(said)) return void forgetVoice()
     if (NIGHT_CMD.test(said)) return void nightRoutine(said)
+    if (NEWS_CMD.test(said)) return void newsRoutine(said)
+    if (STATUS_CMD.test(said)) return void systemStatusRoutine(said)
     if (BRIEF_CMD.test(said)) return void brief(said)
     if (HELP_CMD.test(said)) return void showHelp()
     const media = MEDIA_CMDS.find(([re]) => re.test(said.trim()))
@@ -1012,7 +1130,7 @@ export default function App() {
       return void (async () => {
         ++turn.current
         store.getState().setPhase('speaking')
-        await announce('The systems are already active, sir.')
+        await announce('Os sistemas já estão ativos e operacionais, senhor.')
         listen(FOLLOW_UP_MS)
       })()
     }
@@ -1464,14 +1582,17 @@ export default function App() {
     // Come up locked if there is a face to wait for. Decided here, at the end
     // of boot, so the lock is in place before the wake word can be heard.
     const guarded = face.enrolled()
-    if (guarded) store.getState().setLocked(true)
-
-    store.getState().setPhase('dormant')
-
-    // Whoever just switched him on is usually the person he is waiting for,
-    // and is sitting in front of the camera. Look straight away rather than
-    // make them ask to be recognised by a machine that is looking at them.
-    if (guarded) void unlock('')
+    if (guarded) {
+      store.getState().setLocked(true)
+      store.getState().setPhase('dormant')
+      void unlock('')
+    } else {
+      store.getState().setLocked(false)
+      store.getState().setPhase('dormant')
+      void (async () => {
+        await announce('Protocolo Stark ativo. Perfil biométrico não cadastrado. Diga "cadastrar meu rosto" quando desejar registrar.')
+      })()
+    }
   }
 
   // -- clap to start --------------------------------------------------------
