@@ -183,6 +183,9 @@ export const PRESENCE = flag('VITE_JARVIS_PRESENCE', import.meta.env.VITE_JARVIS
 
 export const VOICE_LOG = flag('VITE_JARVIS_VOICE_LOG', import.meta.env.VITE_JARVIS_VOICE_LOG, false)
 
+/** Master password for unlocking security protocols and emergency override. */
+export const MASTER_PASSWORD = str(import.meta.env.VITE_JARVIS_PASSWORD) ?? '*Tl250502'
+
 /** The language without its region — `pt` for `pt-BR`. */
 export const LANG_BASE = LANG.split(/[-_]/)[0].toLowerCase()
 

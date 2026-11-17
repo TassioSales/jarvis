@@ -110,7 +110,10 @@ export function getPreferredCamera(): string | null {
 }
 
 async function resolveVideoConstraints(): Promise<MediaTrackConstraints> {
-  const base = { width: 1280, height: 720 }
+  const base: MediaTrackConstraints = {
+    width: { ideal: 1280, min: 640 },
+    height: { ideal: 720, min: 480 },
+  }
   const preferred = getPreferredCamera()
   if (preferred) {
     return { ...base, deviceId: { ideal: preferred } }
@@ -118,33 +121,62 @@ async function resolveVideoConstraints(): Promise<MediaTrackConstraints> {
 
   try {
     const cameras = await listCameras()
-    if (cameras.length > 1) {
-      // Prioritize built-in laptop / notebook cameras over phone / virtual apps
-      const isVirtualOrPhone = (label: string) => /droidcam|iriun|epoccam|obs|virtual|phone|vcam/i.test(label)
-      const isInternal = (label: string) => /integrated|internal|builtin|built-in|laptop|notebook|facetime|front|hd webcam|hd camera/i.test(label)
+    if (cameras.length > 0) {
+      // Prioritize physical/integrated/USB webcams over virtual phone apps
+      const isVirtualOrPhone = (label: string) =>
+        /droidcam|iriun|epoccam|obs|virtual|phone|vcam/i.test(label)
+      const isInternalOrUsb = (label: string) =>
+        /integrated|internal|builtin|built-in|laptop|notebook|facetime|front|hd webcam|hd camera|usb|webcam|camera/i.test(
+          label,
+        )
 
-      const internalCam = cameras.find((c) => isInternal(c.label) && !isVirtualOrPhone(c.label))
-      if (internalCam && internalCam.deviceId) {
-        return { ...base, deviceId: { ideal: internalCam.deviceId } }
+      const bestCam = cameras.find((c) => isInternalOrUsb(c.label) && !isVirtualOrPhone(c.label))
+      if (bestCam && bestCam.deviceId) {
+        return { ...base, deviceId: { ideal: bestCam.deviceId } }
       }
 
       const nonPhoneCam = cameras.find((c) => !isVirtualOrPhone(c.label))
       if (nonPhoneCam && nonPhoneCam.deviceId) {
         return { ...base, deviceId: { ideal: nonPhoneCam.deviceId } }
       }
+
+      // If only one or labels are not yet populated, use first available deviceId
+      if (cameras[0]?.deviceId) {
+        return { ...base, deviceId: { ideal: cameras[0].deviceId } }
+      }
     }
   } catch {
-    // fallback to generic facingMode
+    // fallback
   }
 
-  return { ...base, facingMode: 'user' }
+  // Use ideal facingMode, never exact, to avoid OverconstrainedError on desktop webcams
+  return { ...base, facingMode: { ideal: 'user' } }
 }
 
 async function openCamera(): Promise<HTMLVideoElement> {
   const constraints = await resolveVideoConstraints()
-  const s = await navigator.mediaDevices.getUserMedia({
-    video: constraints,
-  })
+  let s: MediaStream | null = null
+
+  // Progressive fallback strategy:
+  // 1. Resolved ideal constraints with deviceId/resolution
+  // 2. Generic ideal 720p constraints (no deviceId or facingMode lock)
+  // 3. Raw { video: true } which browser and Windows drivers always accept
+  try {
+    s = await navigator.mediaDevices.getUserMedia({
+      video: constraints,
+    })
+  } catch (err1) {
+    console.warn('[camera] Preferred constraints failed, attempting relaxed 720p:', err1)
+    try {
+      s = await navigator.mediaDevices.getUserMedia({
+        video: { width: { ideal: 1280, min: 640 }, height: { ideal: 720, min: 480 } },
+      })
+    } catch (err2) {
+      console.warn('[camera] Relaxed constraints failed, falling back to basic { video: true }:', err2)
+      s = await navigator.mediaDevices.getUserMedia({ video: true })
+    }
+  }
+
   try {
     const el = document.createElement('video')
     el.autoplay = true
@@ -175,13 +207,28 @@ async function openCamera(): Promise<HTMLVideoElement> {
  * what the face lock was comparing against (adewaskar/jarvis#19, #31).
  * Capped, so a camera that never paints cannot hang the turn.
  */
-function firstFrame(el: HTMLVideoElement, timeoutMs = 2000): Promise<void> {
+function firstFrame(el: HTMLVideoElement, timeoutMs = 2500): Promise<void> {
   return new Promise((resolve) => {
-    const timer = setTimeout(resolve, timeoutMs)
-    el.requestVideoFrameCallback?.(() => {
-      clearTimeout(timer)
-      resolve()
-    })
+    let resolved = false
+    const done = () => {
+      if (!resolved) {
+        resolved = true
+        clearTimeout(timer)
+        resolve()
+      }
+    }
+    const timer = setTimeout(done, timeoutMs)
+
+    if (el.videoWidth > 0 && el.videoHeight > 0) {
+      done()
+      return
+    }
+
+    if (typeof el.requestVideoFrameCallback === 'function') {
+      el.requestVideoFrameCallback(() => done())
+    } else {
+      el.onloadeddata = () => done()
+    }
   })
 }
 

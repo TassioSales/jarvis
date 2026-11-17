@@ -1,8 +1,10 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useStore } from '../store'
 import { cameraStream } from '../lib/camera'
 import type { Identity } from '../lib/sync'
 import { t } from '../lib/i18n'
+import * as sfx from '../lib/sfx'
+import { MASTER_PASSWORD } from '../config'
 import './lock.css'
 
 const LABEL: Record<Identity, string> = {
@@ -61,14 +63,19 @@ export function Padlock() {
  * Laid over the interface rather than replacing it, so the reactor is still
  * there behind the veil and unlocking reads as the system coming forward, not
  * as a different screen loading. While he is looking, the core shows what the
- * camera sees: the light on a webcam says "recording" and nothing else, and
- * seeing your own face in the ring is what says "this is the check you asked
- * for".
+ * camera sees. Includes biometric face recognition alongside master password override.
  */
 export function Lock() {
   const locked = useStore((s) => s.locked)
   const identity = useStore((s) => s.identity)
+  const setLocked = useStore((s) => s.setLocked)
+  const setIdentity = useStore((s) => s.setIdentity)
+  const fireEffect = useStore((s) => s.fireEffect)
   const video = useRef<HTMLVideoElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+  const [passcode, setPasscode] = useState('')
+  const [errorMsg, setErrorMsg] = useState('')
+  const [isVerifying, setIsVerifying] = useState(false)
 
   useEffect(() => {
     if (identity !== 'scanning') return
@@ -84,17 +91,97 @@ export function Lock() {
     return () => clearInterval(poll)
   }, [identity])
 
+  useEffect(() => {
+    if (locked) {
+      setErrorMsg('')
+      setPasscode('')
+      // Give focus to the password field when locked
+      const timer = setTimeout(() => inputRef.current?.focus(), 150)
+      return () => clearTimeout(timer)
+    }
+  }, [locked])
+
   if (!locked && identity === 'idle') return null
+
+  const handleUnlock = (e?: React.FormEvent) => {
+    e?.preventDefault()
+    if (isVerifying) return
+
+    const clean = passcode.trim()
+    const target = (MASTER_PASSWORD || '*Tl250502').trim()
+
+    // Accept exact match or stripped match (*Tl250502 or Tl250502)
+    if (
+      clean === target ||
+      clean === target.replace(/^\*/, '') ||
+      clean === `*${target}`
+    ) {
+      setIsVerifying(true)
+      setErrorMsg('')
+      setIdentity('granted')
+      fireEffect('scan')
+      sfx.play('done')
+      setTimeout(() => {
+        setLocked(false)
+        setIdentity('idle')
+        setIsVerifying(false)
+        setPasscode('')
+      }, 900)
+    } else {
+      setErrorMsg('ACESSO NEGADO // SENHA INCORRETA')
+      setIdentity('denied')
+      fireEffect('glitch')
+      sfx.play('error')
+      setTimeout(() => {
+        setIdentity('idle')
+        setErrorMsg('')
+      }, 1800)
+    }
+  }
 
   return (
     <div className="lock-veil">
-      <LockRing identity={identity} title="Command Centre">
-        {identity === 'scanning' ? (
-          <video ref={video} className="lock-camera" muted playsInline />
-        ) : (
-          <Padlock />
+      <div className="lock-container">
+        <LockRing identity={identity} title="Command Centre">
+          {identity === 'scanning' ? (
+            <video ref={video} className="lock-camera" muted playsInline />
+          ) : (
+            <Padlock />
+          )}
+        </LockRing>
+
+        {locked && (
+          <form onSubmit={handleUnlock} className="lock-pass-box">
+            <div className="lock-pass-header">
+              <span className="lock-pass-tag">STARK SECURITY OVERRIDE</span>
+              <span className="lock-pass-sub">AUTENTICAÇÃO POR SENHA</span>
+            </div>
+            <div className="lock-pass-input-row">
+              <input
+                ref={inputRef}
+                type="password"
+                className="lock-pass-input"
+                placeholder="Digite a senha..."
+                value={passcode}
+                onChange={(e) => {
+                  setPasscode(e.target.value)
+                  if (errorMsg) setErrorMsg('')
+                }}
+                autoComplete="off"
+                spellCheck={false}
+              />
+              <button type="submit" className="lock-pass-btn">
+                DESBLOQUEAR
+              </button>
+            </div>
+            {errorMsg ? (
+              <div className="lock-pass-error">{errorMsg}</div>
+            ) : (
+              <div className="lock-pass-hint">Pressione Enter ou clique para validar</div>
+            )}
+          </form>
         )}
-      </LockRing>
+      </div>
     </div>
   )
 }

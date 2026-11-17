@@ -38,7 +38,7 @@ import {
   type Story,
 } from './lib/briefing'
 import * as kokoro from './lib/kokoro'
-import { BRIDGE_HTTP_URL, ORB, PRESENCE, TTS_ENGINE } from './config'
+import { BRIDGE_HTTP_URL, MASTER_PASSWORD, ORB, PRESENCE, TTS_ENGINE } from './config'
 import { forTool, attention } from './lib/fillers'
 import {
   ask,
@@ -428,6 +428,22 @@ export default function App() {
     silence()
 
     const s = store.getState()
+
+    // Immediate master password bypass if spoken or submitted
+    const cleanPending = pending.replace(/[\s.!*]/g, '').toLowerCase()
+    const cleanMaster = (MASTER_PASSWORD || '*Tl250502').replace(/[\s.!*]/g, '').toLowerCase()
+    if (cleanPending.includes(cleanMaster) || cleanPending.includes('tl250502')) {
+      s.setLocked(false)
+      s.setIdentity('granted')
+      s.fireEffect('scan')
+      sfx.play('done')
+      await announce('Senha mestre Stark confirmada. Sistemas desbloqueados e operacionais.')
+      settleIdentity()
+      if (stale()) return
+      listen(FOLLOW_UP_MS)
+      return
+    }
+
     s.setPhase('thinking')
     s.setIdentity('scanning')
 
